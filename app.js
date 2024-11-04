@@ -1,7 +1,9 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db');
+const {connectDB }= require('./config/db');
+const fileRoutes = require('./routes/fileRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+// const restaurantRoutes = require('./routes/restaurantRoutes')
 const cors = require('cors');
 // Load environment variables
 dotenv.config();
@@ -18,6 +20,8 @@ app.use(express.json());
 
 // Routes
 app.use('/admin', adminRoutes);
+app.use('/files', fileRoutes); 
+// app.use('/restaurant',restaurantRoutes)
 
 // Start the server
 const PORT = process.env.PORT || 5000;
