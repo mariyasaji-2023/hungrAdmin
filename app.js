@@ -1,7 +1,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const {connectDB }= require('./config/db');
-const fileRoutes = require('./routes/fileRoutes');
+const fileRoutes = require('./routes/restaurantRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 // const restaurantRoutes = require('./routes/restaurantRoutes')
 const cors = require('cors');

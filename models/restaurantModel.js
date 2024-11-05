@@ -6,14 +6,16 @@ const restaurantSchema = new mongoose.Schema({
         type: String,
         // required: true
     },
-    logo: { // stores the ID of the logo file in GridFS
+    categoryType: { // stores the ID of the logo file in GridFS
         type: String,
         // required: true
     },
-    lastUpdated: {
-        type: Date,
-        default: Date.now
-    }
+    rating: {
+        type: String
+    },
+    discription:{
+        type :String
+    },
 });
 
 const Restaurant = mongoose.model('Restaurant', restaurantSchema);
