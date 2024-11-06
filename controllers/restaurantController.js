@@ -164,5 +164,20 @@ const editRestaurant = async (req, res) => {
     }
 };
 
+const searchRestuarant = async(req,res)=>{
+    const {name} = req.body
+    try {
+        const  restaurants = await Restaurant.find({
+            name: { $regex: name, $options: 'i' }
+        }).select('name')
+        res.status(200).json({
+            message: 'Restaurants fetched successfully',
+            restaurants
+        });
+    } catch (error) {
+        console.error('Error searching for restaurants:', error);
+        res.status(500).json({ error: 'Failed to search for restaurants' });
+    }
+}
 
-module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant }
+module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestuarant }

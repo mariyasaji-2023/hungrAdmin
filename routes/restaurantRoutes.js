@@ -7,5 +7,6 @@ router.post('/addCategory',restaurantController.addCategory)
 router.get('/getAllcategories',restaurantController.getAllcategories)
 router.post('/addRestaurant',restaurantController.addRestaurant)
 router.put('/editRestaurant',restaurantController.editRestaurant)
+router.get('/searchRestuarant',restaurantController.searchRestuarant)
 
 module.exports = router;
