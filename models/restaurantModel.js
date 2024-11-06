@@ -1,22 +1,12 @@
-// models/Restaurant.js
 const mongoose = require('mongoose');
 
+// Define the schema for Restaurant without setting any field as immutable
 const restaurantSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        // required: true
-    },
-    categoryType: { // stores the ID of the logo file in GridFS
-        type: String,
-        // required: true
-    },
-    rating: {
-        type: String
-    },
-    discription:{
-        type :String
-    },
+    name: { type: String,},
+    category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
+    rating: { type: Number },
+    description: { type: String }
 });
 
+// Create the model
 const Restaurant = mongoose.model('Restaurant', restaurantSchema);
-module.exports = Restaurant;

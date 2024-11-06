@@ -1,6 +1,8 @@
+const mongoose = require('mongoose');
 require('dotenv').config();
 const { MongoClient } = require('mongodb');
 const Category = require('../models/categoryModel')
+
 
 const uri = 'mongodb+srv://hungrx001:Os4GO3Iajie9lvGr@hungrx.8wv0t.mongodb.net/hungerX';
 
@@ -32,7 +34,11 @@ const addCategory = async (req, res) => {
         res.status(201).json({
             status: true,
             data: {
-                message: 'category added successfully', category
+                message: 'category added successfully', 
+                category: {
+                    id: category._id,
+                    name: category.name
+                }
             }
         })
     } catch (error) {
@@ -72,4 +78,91 @@ const getAllcategories = async (req, res) => {
     }
 }
 
-module.exports = { getRestaurantNames, addCategory, getAllcategories }
+const Restaurant = mongoose.model('Restaurant', new mongoose.Schema({}, { strict: false }));
+
+const addRestaurant = async(req,res)=>{
+    const {category: categoryId, rating, description} = req.body
+    try {
+        // Check if the category exists
+        const category = await Category.findById(categoryId);
+        if (!category) {
+            return res.status(404).json({
+                 status : false,
+                 data:{
+                    error: 'Category not found' 
+                 }
+            });
+        }
+
+        // Create and save the restaurant
+        const restaurant = new Restaurant({
+            logo,
+            category: categoryId,  // Linking to Category ID
+            rating,
+            description,
+            // date: new Date(),       // Optionally add the current date
+            // time: new Date().toTimeString().split(' ')[0] // Optional: add current time in HH:MM:SS format
+        });
+
+        await restaurant.save();
+
+        res.status(201).json({
+            message: 'Restaurant added successfully',
+            restaurant
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Error adding restaurant' });
+    }
+}
+
+
+const editRestaurant = async (req, res) => {
+    const { name, category,restaurantId, rating, description } = req.body;
+
+    try {
+        // Check if the restaurant exists
+        const restaurant = await Restaurant.findById({_id:restaurantId});
+        console.log(restaurant);
+        
+        if (!restaurant) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+
+        // Optional: Check if the category exists
+        if (category) {
+            const categoryExists = await Category.findById(category);
+            if (!categoryExists) {
+                return res.status(404).json({ error: 'Category not found' });
+            }
+        }
+
+        const updateFields = {};
+        if (name) updateFields.name = name;
+        if (category) updateFields.category = category;
+        if (rating) updateFields.rating = rating;
+        if (description) updateFields.description = description;
+
+        // Update the restaurant using restaurantId
+        const updatedRestaurant = await Restaurant.findByIdAndUpdate(
+            restaurantId,
+            { $set: updateFields },
+            { new: true }  // `new: true` ensures it returns the updated document
+        );
+        console.log(updatedRestaurant);
+        
+
+        if (!updatedRestaurant) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+
+        res.status(200).json({
+            message: 'Restaurant updated successfully',
+            restaurant: updatedRestaurant
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Error updating restaurant' });
+    }
+};
+
+
+module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant }
