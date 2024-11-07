@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 const { MongoClient } = require('mongodb');
 const Category = require('../models/categoryModel')
-
+const Restaurant = mongoose.model('Restaurant', new mongoose.Schema({}, { strict: false }));
+const upload = require('../middlewares/multer')
 
 const uri = 'mongodb+srv://hungrx001:Os4GO3Iajie9lvGr@hungrx.8wv0t.mongodb.net/hungerX';
 
@@ -78,21 +79,24 @@ const getAllcategories = async (req, res) => {
     }
 }
 
-const Restaurant = mongoose.model('Restaurant', new mongoose.Schema({}, { strict: false }));
 
-const addRestaurant = async(req,res)=>{
-    const {category: categoryId, rating, description} = req.body
+const addRestaurant =async (req, res) => {
+    const { category: categoryId, rating, description,name } = req.body;
+
     try {
         // Check if the category exists
         const category = await Category.findById(categoryId);
         if (!category) {
             return res.status(404).json({
-                 status : false,
-                 data:{
-                    error: 'Category not found' 
-                 }
+                status: false,
+                data: {
+                    error: 'Category not found'
+                }
             });
         }
+
+        // Get the logo file path if it was uploaded
+        const logo = req.file ? req.file.path : null;
 
         // Create and save the restaurant
         const restaurant = new Restaurant({
@@ -100,8 +104,7 @@ const addRestaurant = async(req,res)=>{
             category: categoryId,  // Linking to Category ID
             rating,
             description,
-            // date: new Date(),       // Optionally add the current date
-            // time: new Date().toTimeString().split(' ')[0] // Optional: add current time in HH:MM:SS format
+            name
         });
 
         await restaurant.save();
@@ -163,13 +166,12 @@ const editRestaurant = async (req, res) => {
         res.status(500).json({ error: 'Error updating restaurant' });
     }
 };
-
-const searchRestuarant = async(req,res)=>{
-    const {name} = req.body
+const searchRestaurant = async (req, res) => {
+    const { name } = req.body;
     try {
-        const  restaurants = await Restaurant.find({
+        const restaurants = await Restaurant.find({
             name: { $regex: name, $options: 'i' }
-        }).select('name')
+        }).select('name logo _id'); // Add 'logo' and '_id' to the select fields
         res.status(200).json({
             message: 'Restaurants fetched successfully',
             restaurants
@@ -180,4 +182,31 @@ const searchRestuarant = async(req,res)=>{
     }
 }
 
-module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestuarant }
+const getRestaurantMenu = async(req,res)=>{
+    const {restaurantId} = req.body
+    try {
+        const restaurant = await Restaurant.findById({_id:restaurantId});
+        console.log(restaurant);
+        
+        if (!restaurant) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+        res.status(200).json({
+            status:true,
+            data: {
+                name: restaurant.name,
+                menu: restaurant.menus 
+            }
+        })
+    } catch (error) {
+        console.error("Error fetching restaurant menu:", error);
+        res.status(500).json({ error: 'Failed to fetch restaurant menu' });
+    }
+}
+
+
+
+
+module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
+    getRestaurantMenu
+ }
