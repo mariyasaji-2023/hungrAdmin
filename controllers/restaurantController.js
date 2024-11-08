@@ -14,7 +14,7 @@ const getRestaurantNames = async (req, res) => {
         console.log("Connected to MongoDB");
         const db = client.db('hungerX');
         const collection = db.collection('restaurants');
-        const restaurantNameAndLogo = await collection.find({}, { projection: { name: 1, logo: 1 } }).toArray();
+        const restaurantNameAndLogo = await collection.find({}, { projection: { name: 1, logo: 1,rating:1,description:1 } }).toArray();
         return res.status(200).json({
             restaurantNameAndLogo
         });
@@ -432,6 +432,7 @@ const createMenuSubcategory = async (req, res) => {
         });
     }
 };
+
 
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
