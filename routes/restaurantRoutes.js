@@ -10,5 +10,7 @@ router.post('/addRestaurant', upload.single('logo'),restaurantController.addRest
 router.put('/editRestaurant', upload.single('logo'),restaurantController.editRestaurant)
 router.post('/searchRestuarant',restaurantController.searchRestaurant)
 router.get('/getMenu',restaurantController.getRestaurantMenu)
+router.post('/addMenuCategory',restaurantController.createmenuCategory)
+router.post('/addMenuSubcategory',restaurantController.createMenuSubcategory)
 
 module.exports = router;

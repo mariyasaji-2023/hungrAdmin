@@ -285,9 +285,155 @@ const getRestaurantMenu = async(req,res)=>{
     }
 }
 
+const createmenuCategory = async (req, res) => {
+    const { name } = req.body;
 
+    try {
+        // Input validation
+        if (!name) {
+            return res.status(400).json({
+                status: false,
+                error: 'Category name is required'
+            });
+        }
+
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const collection = db.collection('menucategories');
+
+        // Check if category already exists
+        const existingCategory = await collection.findOne({ name: name });
+        if (existingCategory) {
+            await client.close();
+            return res.status(400).json({
+                status: false,
+                error: 'Category already exists'
+            });
+        }
+
+        // Create category document
+        const categoryDoc = {
+            name,
+            subcategories: [],
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        // Insert the category
+        const result = await collection.insertOne(categoryDoc);
+        await client.close();
+
+        if (result.insertedId) {
+            res.status(201).json({
+                status: true,
+                message: 'Category created successfully',
+                category: {
+                    _id: result.insertedId,
+                    ...categoryDoc
+                }
+            });
+        } else {
+            throw new Error('Failed to create category');
+        }
+
+    } catch (error) {
+        console.error('Error creating category:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error creating category',
+            details: error.message
+        });
+    }
+};
+
+// Create Subcategory
+const createMenuSubcategory = async (req, res) => {
+    const { categoryId, name } = req.body;
+
+    try {
+        // Input validation
+        if (!categoryId || !name) {
+            return res.status(400).json({
+                status: false,
+                error: 'Category ID and subcategory name are required'
+            });
+        }
+
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const collection = db.collection('menucategories');
+
+        // Check if category exists
+        const category = await collection.findOne({ 
+            _id: new ObjectId(categoryId)
+        });
+
+        if (!category) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Category not found'
+            });
+        }
+
+        // Check if subcategory already exists
+        const subcategoryExists = category.subcategories.some(
+            sub => sub.name.toLowerCase() === name.toLowerCase()
+        );
+
+        if (subcategoryExists) {
+            await client.close();
+            return res.status(400).json({
+                status: false,
+                error: 'Subcategory already exists in this category'
+            });
+        }
+
+        // Create subcategory document
+        const subcategoryDoc = {
+            _id: new ObjectId(),
+            name,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        // Add subcategory to category
+        const result = await collection.findOneAndUpdate(
+            { _id: new ObjectId(categoryId) },
+            { 
+                $push: { subcategories: subcategoryDoc },
+                $set: { updatedAt: new Date() }
+            },
+            { returnDocument: 'after' }
+        );
+
+        await client.close();
+
+        if (result) {
+            res.status(201).json({
+                status: true,
+                message: 'Subcategory created successfully',
+                category: result
+            });
+        } else {
+            throw new Error('Failed to create subcategory');
+        }
+
+    } catch (error) {
+        console.error('Error creating subcategory:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error creating subcategory',
+            details: error.message
+        });
+    }
+};
 
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu
+    getRestaurantMenu,createmenuCategory,createMenuSubcategory
  }
