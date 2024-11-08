@@ -80,43 +80,74 @@ const getAllcategories = async (req, res) => {
 }
 
 
-const addRestaurant =async (req, res) => {
-    const { category: categoryId, rating, description,name } = req.body;
+const addRestaurant = async (req, res) => {
+    const { category: categoryId, rating, description, name } = req.body;
 
     try {
-        // Check if the category exists
-        const category = await Category.findById(categoryId);
-        if (!category) {
-            return res.status(404).json({
+        // Check if we have a file
+        if (!req.file) {
+            return res.status(400).json({ 
                 status: false,
-                data: {
-                    error: 'Category not found'
-                }
+                error: 'No logo file provided' 
             });
         }
 
-        // Get the logo file path if it was uploaded
-        const logo = req.file ? req.file.path : null;
+        // Get the file location from S3/DigitalOcean Spaces
+        const logo = req.file.location;
+        
+        if (!logo) {
+            return res.status(400).json({ 
+                status: false,
+                error: 'Logo upload failed' 
+            });
+        }
 
-        // Create and save the restaurant
-        const restaurant = new Restaurant({
+        // Connect to MongoDB directly to insert into existing collection
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const collection = db.collection('restaurants');
+
+        // Create restaurant document
+        const restaurantDoc = {
+            name,
             logo,
-            category: categoryId,  // Linking to Category ID
-            rating,
+            category: categoryId,
+            rating: parseFloat(rating),
             description,
-            name
-        });
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
 
-        await restaurant.save();
+        // Insert the restaurant
+        const result = await collection.insertOne(restaurantDoc);
 
-        res.status(201).json({
-            message: 'Restaurant added successfully',
-            restaurant
-        });
+        // Close the connection
+        await client.close();
+
+        if (result.insertedId) {
+            res.status(201).json({
+                status: true,
+                message: 'Restaurant added successfully',
+                restaurant: {
+                    _id: result.insertedId,
+                    ...restaurantDoc
+                }
+            });
+        } else {
+            throw new Error('Failed to insert restaurant');
+        }
+
     } catch (error) {
-        res.status(500).json({ error: 'Error adding restaurant' });
+        console.error('Error adding restaurant:', error);
+        res.status(500).json({ 
+            status: false,
+            error: 'Error adding restaurant',
+            details: error.message 
+        });
     }
-}
+};
 
 
 const editRestaurant = async (req, res) => {

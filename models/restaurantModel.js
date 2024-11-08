@@ -5,8 +5,9 @@ const restaurantSchema = new mongoose.Schema({
     name: { type: String,},
     category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
     rating: { type: Number },
-    description: { type: String }
+    description: { type: String },
+    logo: { type: String } 
 });
 
 // Create the model
-const Restaurant = mongoose.model('Restaurant', restaurantSchema);
+module.exports = mongoose.model('Restaurant', restaurantSchema);
