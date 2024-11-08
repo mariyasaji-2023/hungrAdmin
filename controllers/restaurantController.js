@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
-const { MongoClient } = require('mongodb');
+const { MongoClient,ObjectId } = require('mongodb');
 const Category = require('../models/categoryModel')
 const Restaurant = mongoose.model('Restaurant', new mongoose.Schema({}, { strict: false }));
 const upload = require('../middlewares/multer')
@@ -148,55 +148,105 @@ const addRestaurant = async (req, res) => {
         });
     }
 };
-
-
 const editRestaurant = async (req, res) => {
-    const { name, category,restaurantId, rating, description } = req.body;
-
     try {
-        // Check if the restaurant exists
-        const restaurant = await Restaurant.findById({_id:restaurantId});
-        console.log(restaurant);
+        // Log the entire req.body to debug
+        console.log('Request body:', req.body);
         
-        if (!restaurant) {
-            return res.status(404).json({ error: 'Restaurant not found' });
+        // Get restaurantId from form-data
+        const restaurantId = req.body.restaurantId;
+        console.log('Received restaurantId:', restaurantId);
+
+        if (!restaurantId) {
+            return res.status(400).json({
+                status: false,
+                error: 'Restaurant ID is required'
+            });
         }
 
-        // Optional: Check if the category exists
-        if (category) {
-            const categoryExists = await Category.findById(category);
-            if (!categoryExists) {
-                return res.status(404).json({ error: 'Category not found' });
-            }
-        }
-
-        const updateFields = {};
-        if (name) updateFields.name = name;
-        if (category) updateFields.category = category;
-        if (rating) updateFields.rating = rating;
-        if (description) updateFields.description = description;
-
-        // Update the restaurant using restaurantId
-        const updatedRestaurant = await Restaurant.findByIdAndUpdate(
-            restaurantId,
-            { $set: updateFields },
-            { new: true }  // `new: true` ensures it returns the updated document
-        );
-        console.log(updatedRestaurant);
+        // Connect to MongoDB directly
+        const client = new MongoClient(uri);
+        await client.connect();
         
+        const db = client.db('hungerX');
+        const collection = db.collection('restaurants');
 
-        if (!updatedRestaurant) {
-            return res.status(404).json({ error: 'Restaurant not found' });
-        }
-
-        res.status(200).json({
-            message: 'Restaurant updated successfully',
-            restaurant: updatedRestaurant
+        // Check if restaurant exists
+        const existingRestaurant = await collection.findOne({ 
+            _id: new ObjectId(restaurantId) 
         });
+
+        console.log('Found restaurant:', existingRestaurant);
+
+        if (!existingRestaurant) {
+            await client.close();
+            return res.status(404).json({ 
+                status: false,
+                error: 'Restaurant not found' 
+            });
+        }
+
+        // Prepare update fields
+        const updateFields = {
+            updatedAt: new Date()
+        };
+
+        // Get other fields from form-data
+        if (req.body.name) updateFields.name = req.body.name;
+        if (req.body.category) updateFields.category = req.body.category;
+        if (req.body.rating) updateFields.rating = parseFloat(req.body.rating);
+        if (req.body.description) updateFields.description = req.body.description;
+
+        // Handle logo upload if file is provided
+        if (req.file) {
+            const logo = req.file.location;
+            if (!logo) {
+                await client.close();
+                return res.status(400).json({ 
+                    status: false,
+                    error: 'Logo upload failed' 
+                });
+            }
+            updateFields.logo = logo;
+        }
+
+        console.log('Update fields:', updateFields);
+
+        // Update the restaurant
+        const result = await collection.findOneAndUpdate(
+            { _id: new ObjectId(restaurantId) },
+            { $set: updateFields },
+            { returnDocument: 'after' }
+        );
+
+        // Close the connection
+        await client.close();
+
+        // Changed the result checking logic
+        if (result) {
+            res.status(200).json({
+                status: true,
+                message: 'Restaurant updated successfully',
+                restaurant: result
+            });
+        } else {
+            res.status(404).json({
+                status: false,
+                error: 'Restaurant update failed'
+            });
+        }
+
     } catch (error) {
-        res.status(500).json({ error: 'Error updating restaurant' });
+        console.error('Error updating restaurant:', error);
+        res.status(500).json({ 
+            status: false,
+            error: 'Error updating restaurant',
+            details: error.message 
+        });
     }
 };
+
+
 const searchRestaurant = async (req, res) => {
     const { name } = req.body;
     try {

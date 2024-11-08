@@ -7,7 +7,7 @@ router.get('/getRestaurant', restaurantController.getRestaurantNames);
 router.post('/addCategory',restaurantController.addCategory)
 router.get('/getAllcategories',restaurantController.getAllcategories)
 router.post('/addRestaurant', upload.single('logo'),restaurantController.addRestaurant)
-router.put('/editRestaurant',restaurantController.editRestaurant)
+router.put('/editRestaurant', upload.single('logo'),restaurantController.editRestaurant)
 router.post('/searchRestuarant',restaurantController.searchRestaurant)
 router.get('/getMenu',restaurantController.getRestaurantMenu)
 
