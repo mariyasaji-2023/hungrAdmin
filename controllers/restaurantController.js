@@ -465,8 +465,64 @@ const createMenuSubcategory = async (req, res) => {
     }
 };
 
+const searchMenu = async (req, res) => {
+    const { query, restaurantId } = req.body;
+
+    if (!query) {
+        return res.status(400).json({
+            status: false,
+            error: 'Search query is required'
+        });
+    }
+
+    try {
+        const restaurant = await Restaurant.findById(restaurantId);
+        
+        if (!restaurant) {
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
+
+        // Create a case-insensitive search through all menus and dishes
+        const searchResults = restaurant.menus.reduce((results, menu) => {
+            const matchingDishes = menu.dishes.filter(dish => 
+                dish.name.toLowerCase().includes(query.toLowerCase())
+            );
+
+            if (matchingDishes.length > 0) {
+                results.push({
+                    menuName: menu.name,
+                    dishes: matchingDishes
+                });
+            }
+
+            return results;
+        }, []);
+
+        return res.status(200).json({
+            status: true,
+            data: {
+                restaurantName: restaurant.name,
+                results: searchResults,
+                totalResults: searchResults.reduce((total, menu) => 
+                    total + menu.dishes.length, 0
+                )
+            }
+        });
+
+    } catch (error) {
+        console.error("Error searching menu:", error);
+        return res.status(500).json({
+            status: false,
+            error: 'Failed to search menu'
+        });
+    }
+}
+
 
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,createmenuCategory,createMenuSubcategory
+    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu
  }

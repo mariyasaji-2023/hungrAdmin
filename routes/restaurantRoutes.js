@@ -12,6 +12,7 @@ router.post('/searchRestuarant',restaurantController.searchRestaurant)
 router.get('/getMenu',restaurantController.getRestaurantMenu)
 router.post('/addMenuCategory',restaurantController.createmenuCategory)
 router.post('/addMenuSubcategory',restaurantController.createMenuSubcategory)
+router.post('/searchMenu',restaurantController.searchMenu)
 
 module.exports = router;
 
