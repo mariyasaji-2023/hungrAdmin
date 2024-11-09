@@ -504,7 +504,15 @@ const searchMenu = async (req, res) => {
         return res.status(200).json({
             status: true,
             data: {
-                restaurantName: restaurant.name,
+                restaurant: {
+                    _id: restaurant._id,
+                    name: restaurant.name,
+                    logo: restaurant.logo,
+                    category: restaurant.category,
+                    rating: restaurant.rating,
+                    createdAt: restaurant.createdAt,
+                    updatedAt: restaurant.updatedAt
+                },
                 results: searchResults,
                 totalResults: searchResults.reduce((total, menu) => 
                     total + menu.dishes.length, 0
@@ -520,8 +528,6 @@ const searchMenu = async (req, res) => {
         });
     }
 }
-
-
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
     getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu
