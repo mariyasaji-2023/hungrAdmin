@@ -14,3 +14,4 @@ router.post('/addMenuCategory',restaurantController.createmenuCategory)
 router.post('/addMenuSubcategory',restaurantController.createMenuSubcategory)
 
 module.exports = router;
+

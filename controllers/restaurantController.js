@@ -6,7 +6,6 @@ const Restaurant = mongoose.model('Restaurant', new mongoose.Schema({}, { strict
 const upload = require('../middlewares/multer')
 
 const uri = 'mongodb+srv://hungrx001:Os4GO3Iajie9lvGr@hungrx.8wv0t.mongodb.net/hungerX';
-
 const getRestaurantNames = async (req, res) => {
     const client = new MongoClient(uri);
     try {
@@ -14,17 +13,50 @@ const getRestaurantNames = async (req, res) => {
         console.log("Connected to MongoDB");
         const db = client.db('hungerX');
         const collection = db.collection('restaurants');
-        const restaurantNameAndLogo = await collection.find({}, { projection: { name: 1, logo: 1,rating:1,description:1 } }).toArray();
+        const restaurants = await collection.find({}, { 
+            projection: { 
+                name: 1, 
+                logo: 1,
+                rating: 1,
+                description: 1,
+                category: 1,
+                createdAt: 1,
+                updatedAt: 1 
+            } 
+        }).toArray();
+
+        // Format dates for each restaurant
+        const formattedRestaurants = restaurants.map(restaurant => ({
+            ...restaurant,
+            createdAt: formatDateTime(restaurant.createdAt),
+            updatedAt: formatDateTime(restaurant.updatedAt)
+        }));
+
         return res.status(200).json({
-            restaurantNameAndLogo
+            restaurants: formattedRestaurants
         });
     } catch (error) {
         console.error("Error fetching restaurant names:", error);
         return res.status(500).json({ error: "Failed to fetch restaurant names" });
     } finally {
-        // Close the MongoDB connection
         await client.close();
     }
+}
+
+// Helper function to format date and time
+const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    
+    // Format date as DD-MM-YYYY
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    
+    // Format time as HH.MM
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return `${day}-${month}-${year}, ${hours}.${minutes}`;
 }
 
 const addCategory = async (req, res) => {
