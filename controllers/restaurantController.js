@@ -558,6 +558,245 @@ const searchMenu = async (req, res) => {
     }
 }
 
+const addDish = async (req, res) => {
+    const { 
+        name, 
+        price, 
+        rating, 
+        description, 
+        calories, 
+        carbs, 
+        protein, 
+        fats,
+        servingSize,
+        servingUnit,
+        categoryId,
+        restaurantId,
+        menuId
+    } = req.body;
+
+    try {
+        if (!req.file) {
+            return res.status(400).json({ 
+                status: false,
+                error: 'No dish image provided' 
+            });
+        }
+
+        const image = req.file.location;
+        
+        if (!image) {
+            return res.status(400).json({ 
+                status: false,
+                error: 'Image upload failed' 
+            });
+        }
+
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const dishesCollection = db.collection('dishes');
+        const categoriesCollection = db.collection('categories');
+
+        // Fetch category details
+        const categoryDoc = await categoriesCollection.findOne({ 
+            _id: new ObjectId(categoryId) 
+        });
+
+        if (!categoryDoc) {
+            await client.close();
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid category ID'
+            });
+        }
+
+        const now = new Date();
+        const dishDoc = {
+            name,
+            image,
+            price: parseFloat(price),
+            rating: parseFloat(rating),
+            description,
+            restaurantId,
+            menuId,
+            category: {
+                _id: categoryId,
+                name: categoryDoc.name
+            },
+            servingInfo: {
+                size: parseFloat(servingSize),
+                unit: servingUnit,
+                equivalentTo: `${servingSize} ${servingUnit} of ${name}`
+            },
+            nutritionFacts: {
+                calories: parseInt(calories),
+                totalCarbohydrates: {
+                    value: parseFloat(carbs)
+                },
+                protein: {
+                    value: parseFloat(protein)
+                },
+                totalFat: {
+                    value: parseFloat(fats)
+                }
+            },
+            createdAt: formatDate(now),
+            updatedAt: formatDate(now)
+        };
+
+        const result = await dishesCollection.insertOne(dishDoc);
+        await client.close();
+
+        if (result.insertedId) {
+            res.status(201).json({
+                status: true,
+                message: 'Dish added successfully',
+                dish: {
+                    _id: result.insertedId,
+                    ...dishDoc
+                }
+            });
+        } else {
+            throw new Error('Failed to insert dish');
+        }
+
+    } catch (error) {
+        console.error('Error adding dish:', error);
+        res.status(500).json({ 
+            status: false,
+            error: 'Error adding dish',
+            details: error.message 
+        });
+    }
+};
+
+const editDish = async (req, res) => {
+    try {
+        const dishId = req.body.dishId;
+
+        if (!dishId) {
+            return res.status(400).json({
+                status: false,
+                error: 'Dish ID is required'
+            });
+        }
+
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const dishesCollection = db.collection('dishes');
+        const categoriesCollection = db.collection('categories');
+
+        const existingDish = await dishesCollection.findOne({ 
+            _id: new ObjectId(dishId) 
+        });
+
+        if (!existingDish) {
+            await client.close();
+            return res.status(404).json({ 
+                status: false,
+                error: 'Dish not found' 
+            });
+        }
+
+        const updateFields = {
+            updatedAt: formatDate(new Date())
+        };
+
+        // Handle category update
+        if (req.body.categoryId) {
+            const categoryDoc = await categoriesCollection.findOne({ 
+                _id: new ObjectId(req.body.categoryId) 
+            });
+
+            if (!categoryDoc) {
+                await client.close();
+                return res.status(400).json({
+                    status: false,
+                    error: 'Invalid category ID'
+                });
+            }
+
+            updateFields.category = {
+                _id: req.body.categoryId,
+                name: categoryDoc.name
+            };
+        }
+
+        // Update basic fields
+        if (req.body.name) updateFields.name = req.body.name;
+        if (req.body.price) updateFields.price = parseFloat(req.body.price);
+        if (req.body.rating) updateFields.rating = parseFloat(req.body.rating);
+        if (req.body.description) updateFields.description = req.body.description;
+
+        // Update serving info
+        if (req.body.servingSize || req.body.servingUnit) {
+            updateFields.servingInfo = {
+                ...existingDish.servingInfo,
+                ...(req.body.servingSize && { size: parseFloat(req.body.servingSize) }),
+                ...(req.body.servingUnit && { unit: req.body.servingUnit }),
+                equivalentTo: `${req.body.servingSize || existingDish.servingInfo.size} ${req.body.servingUnit || existingDish.servingInfo.unit} of ${req.body.name || existingDish.name}`
+            };
+        }
+
+        // Update nutrition facts
+        if (req.body.calories || req.body.carbs || req.body.protein || req.body.fats) {
+            updateFields.nutritionFacts = {
+                ...existingDish.nutritionFacts,
+                ...(req.body.calories && { calories: parseInt(req.body.calories) }),
+                ...(req.body.carbs && { totalCarbohydrates: { value: parseFloat(req.body.carbs) } }),
+                ...(req.body.protein && { protein: { value: parseFloat(req.body.protein) } }),
+                ...(req.body.fats && { totalFat: { value: parseFloat(req.body.fats) } })
+            };
+        }
+
+        // Handle image upload
+        if (req.file) {
+            const image = req.file.location;
+            if (!image) {
+                await client.close();
+                return res.status(400).json({ 
+                    status: false,
+                    error: 'Image upload failed' 
+                });
+            }
+            updateFields.image = image;
+        }
+
+        const result = await dishesCollection.findOneAndUpdate(
+            { _id: new ObjectId(dishId) },
+            { $set: updateFields },
+            { returnDocument: 'after' }
+        );
+
+        await client.close();
+
+        if (result) {
+            res.status(200).json({
+                status: true,
+                message: 'Dish updated successfully',
+                dish: result
+            });
+        } else {
+            res.status(404).json({
+                status: false,
+                error: 'Dish update failed'
+            });
+        }
+
+    } catch (error) {
+        console.error('Error updating dish:', error);
+        res.status(500).json({ 
+            status: false,
+            error: 'Error updating dish',
+            details: error.message 
+        });
+    }
+};
+
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu
+    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish
  }

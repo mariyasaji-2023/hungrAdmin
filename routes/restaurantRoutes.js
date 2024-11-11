@@ -9,10 +9,12 @@ router.get('/getAllcategories',restaurantController.getAllcategories)
 router.post('/addRestaurant', upload.single('logo'),restaurantController.addRestaurant)
 router.put('/editRestaurant', upload.single('logo'),restaurantController.editRestaurant)
 router.post('/searchRestuarant',restaurantController.searchRestaurant)
-router.get('/getMenu',restaurantController.getRestaurantMenu)
+router.post('/getMenu',restaurantController.getRestaurantMenu)
 router.post('/addMenuCategory',restaurantController.createmenuCategory)
 router.post('/addMenuSubcategory',restaurantController.createMenuSubcategory)
 router.post('/searchMenu',restaurantController.searchMenu)
+router.post('/addDish',upload.single('image'),restaurantController.addDish)
+router.put('/editDish',upload.single('image'),restaurantController.editDish)
 
 module.exports = router;
 
