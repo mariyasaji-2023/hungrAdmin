@@ -110,13 +110,22 @@ const getAllcategories = async (req, res) => {
         await client.close()
     }
 }
-
+// Helper function to format date
+const formatDate = (date) => {
+    return new Intl.DateTimeFormat('en-US', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    }).format(date);
+};
 
 const addRestaurant = async (req, res) => {
     const { category: categoryId, rating, description, name } = req.body;
 
     try {
-        // Check if we have a file
         if (!req.file) {
             return res.status(400).json({ 
                 status: false,
@@ -124,7 +133,6 @@ const addRestaurant = async (req, res) => {
             });
         }
 
-        // Get the file location from S3/DigitalOcean Spaces
         const logo = req.file.location;
         
         if (!logo) {
@@ -134,28 +142,40 @@ const addRestaurant = async (req, res) => {
             });
         }
 
-        // Connect to MongoDB directly to insert into existing collection
         const client = new MongoClient(uri);
         await client.connect();
         
         const db = client.db('hungerX');
-        const collection = db.collection('restaurants');
+        const restaurantsCollection = db.collection('restaurants');
+        const categoriesCollection = db.collection('categories');
 
-        // Create restaurant document
+        const categoryDoc = await categoriesCollection.findOne({ 
+            _id: new ObjectId(categoryId) 
+        });
+
+        if (!categoryDoc) {
+            await client.close();
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid category ID'
+            });
+        }
+
+        const now = new Date();
         const restaurantDoc = {
             name,
             logo,
-            category: categoryId,
+            category: {
+                _id: categoryId,
+                name: categoryDoc.name
+            },
             rating: parseFloat(rating),
             description,
-            createdAt: new Date(),
-            updatedAt: new Date()
+            createdAt: formatDate(now),
+            updatedAt: formatDate(now)
         };
 
-        // Insert the restaurant
-        const result = await collection.insertOne(restaurantDoc);
-
-        // Close the connection
+        const result = await restaurantsCollection.insertOne(restaurantDoc);
         await client.close();
 
         if (result.insertedId) {
@@ -180,12 +200,11 @@ const addRestaurant = async (req, res) => {
         });
     }
 };
+
 const editRestaurant = async (req, res) => {
     try {
-        // Log the entire req.body to debug
         console.log('Request body:', req.body);
         
-        // Get restaurantId from form-data
         const restaurantId = req.body.restaurantId;
         console.log('Received restaurantId:', restaurantId);
 
@@ -196,15 +215,14 @@ const editRestaurant = async (req, res) => {
             });
         }
 
-        // Connect to MongoDB directly
         const client = new MongoClient(uri);
         await client.connect();
         
         const db = client.db('hungerX');
-        const collection = db.collection('restaurants');
+        const restaurantsCollection = db.collection('restaurants');
+        const categoriesCollection = db.collection('categories');
 
-        // Check if restaurant exists
-        const existingRestaurant = await collection.findOne({ 
+        const existingRestaurant = await restaurantsCollection.findOne({ 
             _id: new ObjectId(restaurantId) 
         });
 
@@ -218,18 +236,33 @@ const editRestaurant = async (req, res) => {
             });
         }
 
-        // Prepare update fields
         const updateFields = {
-            updatedAt: new Date()
+            updatedAt: formatDate(new Date())
         };
 
-        // Get other fields from form-data
+        if (req.body.category) {
+            const categoryDoc = await categoriesCollection.findOne({ 
+                _id: new ObjectId(req.body.category) 
+            });
+
+            if (!categoryDoc) {
+                await client.close();
+                return res.status(400).json({
+                    status: false,
+                    error: 'Invalid category ID'
+                });
+            }
+
+            updateFields.category = {
+                _id: req.body.category,
+                name: categoryDoc.name
+            };
+        }
+
         if (req.body.name) updateFields.name = req.body.name;
-        if (req.body.category) updateFields.category = req.body.category;
         if (req.body.rating) updateFields.rating = parseFloat(req.body.rating);
         if (req.body.description) updateFields.description = req.body.description;
 
-        // Handle logo upload if file is provided
         if (req.file) {
             const logo = req.file.location;
             if (!logo) {
@@ -244,17 +277,14 @@ const editRestaurant = async (req, res) => {
 
         console.log('Update fields:', updateFields);
 
-        // Update the restaurant
-        const result = await collection.findOneAndUpdate(
+        const result = await restaurantsCollection.findOneAndUpdate(
             { _id: new ObjectId(restaurantId) },
             { $set: updateFields },
             { returnDocument: 'after' }
         );
 
-        // Close the connection
         await client.close();
 
-        // Changed the result checking logic
         if (result) {
             res.status(200).json({
                 status: true,
@@ -277,7 +307,6 @@ const editRestaurant = async (req, res) => {
         });
     }
 };
-
 
 const searchRestaurant = async (req, res) => {
     const { name } = req.body;
