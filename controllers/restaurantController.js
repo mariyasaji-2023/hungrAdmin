@@ -558,6 +558,7 @@ const searchMenu = async (req, res) => {
     }
 }
 
+
 const addDish = async (req, res) => {
     const { 
         name, 
@@ -596,8 +597,21 @@ const addDish = async (req, res) => {
         await client.connect();
         
         const db = client.db('hungerX');
-        const dishesCollection = db.collection('dishes');
-        const categoriesCollection = db.collection('categories');
+        const restaurantsCollection = db.collection('restaurants');
+        const categoriesCollection = db.collection('menucategories');
+
+        // Verify restaurant exists
+        const restaurant = await restaurantsCollection.findOne({
+            _id: new ObjectId(restaurantId)
+        });
+
+        if (!restaurant) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
 
         // Fetch category details
         const categoryDoc = await categoriesCollection.findOne({ 
@@ -613,14 +627,13 @@ const addDish = async (req, res) => {
         }
 
         const now = new Date();
-        const dishDoc = {
+        const newDish = {
+            _id: new ObjectId(), // Generate new ObjectId for the dish
             name,
             image,
             price: parseFloat(price),
             rating: parseFloat(rating),
             description,
-            restaurantId,
-            menuId,
             category: {
                 _id: categoryId,
                 name: categoryDoc.name
@@ -646,20 +659,29 @@ const addDish = async (req, res) => {
             updatedAt: formatDate(now)
         };
 
-        const result = await dishesCollection.insertOne(dishDoc);
+        // Update the restaurant document by adding the dish to the specific menu
+        const result = await restaurantsCollection.updateOne(
+            { 
+                _id: new ObjectId(restaurantId),
+                "menus._id": menuId
+            },
+            { 
+                $push: { 
+                    "menus.$.dishes": newDish 
+                } 
+            }
+        );
+
         await client.close();
 
-        if (result.insertedId) {
+        if (result.modifiedCount > 0) {
             res.status(201).json({
                 status: true,
                 message: 'Dish added successfully',
-                dish: {
-                    _id: result.insertedId,
-                    ...dishDoc
-                }
+                dish: newDish
             });
         } else {
-            throw new Error('Failed to insert dish');
+            throw new Error('Failed to add dish to menu');
         }
 
     } catch (error) {
@@ -674,12 +696,17 @@ const addDish = async (req, res) => {
 
 const editDish = async (req, res) => {
     try {
-        const dishId = req.body.dishId;
+        const { 
+            dishId,
+            restaurantId,
+            menuId,
+            ...updateData 
+        } = req.body;
 
-        if (!dishId) {
+        if (!dishId || !restaurantId || !menuId) {
             return res.status(400).json({
                 status: false,
-                error: 'Dish ID is required'
+                error: 'Dish ID, Restaurant ID, and Menu ID are required'
             });
         }
 
@@ -687,29 +714,13 @@ const editDish = async (req, res) => {
         await client.connect();
         
         const db = client.db('hungerX');
-        const dishesCollection = db.collection('dishes');
-        const categoriesCollection = db.collection('categories');
+        const restaurantsCollection = db.collection('restaurants');
+        const categoriesCollection = db.collection('menucategories');
 
-        const existingDish = await dishesCollection.findOne({ 
-            _id: new ObjectId(dishId) 
-        });
-
-        if (!existingDish) {
-            await client.close();
-            return res.status(404).json({ 
-                status: false,
-                error: 'Dish not found' 
-            });
-        }
-
-        const updateFields = {
-            updatedAt: formatDate(new Date())
-        };
-
-        // Handle category update
-        if (req.body.categoryId) {
+        // Handle category update if provided
+        if (updateData.categoryId) {
             const categoryDoc = await categoriesCollection.findOne({ 
-                _id: new ObjectId(req.body.categoryId) 
+                _id: new ObjectId(updateData.categoryId) 
             });
 
             if (!categoryDoc) {
@@ -720,36 +731,39 @@ const editDish = async (req, res) => {
                 });
             }
 
-            updateFields.category = {
-                _id: req.body.categoryId,
+            updateData.category = {
+                _id: updateData.categoryId,
                 name: categoryDoc.name
             };
+            delete updateData.categoryId;
         }
 
-        // Update basic fields
-        if (req.body.name) updateFields.name = req.body.name;
-        if (req.body.price) updateFields.price = parseFloat(req.body.price);
-        if (req.body.rating) updateFields.rating = parseFloat(req.body.rating);
-        if (req.body.description) updateFields.description = req.body.description;
+        // Prepare update fields
+        const updateFields = {
+            ...(updateData.name && { "menus.$[menu].dishes.$[dish].name": updateData.name }),
+            ...(updateData.price && { "menus.$[menu].dishes.$[dish].price": parseFloat(updateData.price) }),
+            ...(updateData.rating && { "menus.$[menu].dishes.$[dish].rating": parseFloat(updateData.rating) }),
+            ...(updateData.description && { "menus.$[menu].dishes.$[dish].description": updateData.description }),
+            ...(updateData.category && { "menus.$[menu].dishes.$[dish].category": updateData.category }),
+            "menus.$[menu].dishes.$[dish].updatedAt": formatDate(new Date())
+        };
 
-        // Update serving info
-        if (req.body.servingSize || req.body.servingUnit) {
-            updateFields.servingInfo = {
-                ...existingDish.servingInfo,
-                ...(req.body.servingSize && { size: parseFloat(req.body.servingSize) }),
-                ...(req.body.servingUnit && { unit: req.body.servingUnit }),
-                equivalentTo: `${req.body.servingSize || existingDish.servingInfo.size} ${req.body.servingUnit || existingDish.servingInfo.unit} of ${req.body.name || existingDish.name}`
+        // Handle serving info update
+        if (updateData.servingSize || updateData.servingUnit) {
+            updateFields["menus.$[menu].dishes.$[dish].servingInfo"] = {
+                size: updateData.servingSize ? parseFloat(updateData.servingSize) : undefined,
+                unit: updateData.servingUnit,
+                equivalentTo: `${updateData.servingSize || ""} ${updateData.servingUnit || ""} of ${updateData.name || ""}`
             };
         }
 
-        // Update nutrition facts
-        if (req.body.calories || req.body.carbs || req.body.protein || req.body.fats) {
-            updateFields.nutritionFacts = {
-                ...existingDish.nutritionFacts,
-                ...(req.body.calories && { calories: parseInt(req.body.calories) }),
-                ...(req.body.carbs && { totalCarbohydrates: { value: parseFloat(req.body.carbs) } }),
-                ...(req.body.protein && { protein: { value: parseFloat(req.body.protein) } }),
-                ...(req.body.fats && { totalFat: { value: parseFloat(req.body.fats) } })
+        // Handle nutrition facts update
+        if (updateData.calories || updateData.carbs || updateData.protein || updateData.fats) {
+            updateFields["menus.$[menu].dishes.$[dish].nutritionFacts"] = {
+                ...(updateData.calories && { calories: parseInt(updateData.calories) }),
+                ...(updateData.carbs && { totalCarbohydrates: { value: parseFloat(updateData.carbs) } }),
+                ...(updateData.protein && { protein: { value: parseFloat(updateData.protein) } }),
+                ...(updateData.fats && { totalFat: { value: parseFloat(updateData.fats) } })
             };
         }
 
@@ -763,27 +777,32 @@ const editDish = async (req, res) => {
                     error: 'Image upload failed' 
                 });
             }
-            updateFields.image = image;
+            updateFields["menus.$[menu].dishes.$[dish].image"] = image;
         }
 
-        const result = await dishesCollection.findOneAndUpdate(
-            { _id: new ObjectId(dishId) },
+        // Update the dish within the restaurant's menu
+        const result = await restaurantsCollection.updateOne(
+            { _id: new ObjectId(restaurantId) },
             { $set: updateFields },
-            { returnDocument: 'after' }
+            {
+                arrayFilters: [
+                    { "menu._id": menuId },
+                    { "dish._id": new ObjectId(dishId) }
+                ]
+            }
         );
 
         await client.close();
 
-        if (result) {
+        if (result.modifiedCount > 0) {
             res.status(200).json({
                 status: true,
-                message: 'Dish updated successfully',
-                dish: result
+                message: 'Dish updated successfully'
             });
         } else {
             res.status(404).json({
                 status: false,
-                error: 'Dish update failed'
+                error: 'Dish not found or update failed'
             });
         }
 
