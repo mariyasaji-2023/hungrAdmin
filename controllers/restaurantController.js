@@ -284,7 +284,7 @@ const searchRestaurant = async (req, res) => {
     try {
         const restaurants = await Restaurant.find({
             name: { $regex: name, $options: 'i' }
-        }).select('name logo _id'); // Add 'logo' and '_id' to the select fields
+        }).select('name logo _id category rating description createdAt updatedAt'); // Add 'logo' and '_id' to the select fields
         res.status(200).json({
             message: 'Restaurants fetched successfully',
             restaurants
