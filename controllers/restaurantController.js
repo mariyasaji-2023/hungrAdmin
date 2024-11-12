@@ -559,6 +559,108 @@ const searchMenu = async (req, res) => {
 }
 
 
+const getMenuByCategory = async (req, res) => {
+    const { restaurantId, categoryId } = req.body;
+
+    try {
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const restaurantsCollection = db.collection('restaurants');
+
+        // Find the restaurant
+        const restaurant = await restaurantsCollection.findOne({
+            _id: new ObjectId(restaurantId)
+        });
+
+        if (!restaurant) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
+
+        // If categoryId is provided, filter by category
+        if (categoryId) {
+            // Filter dishes by category across all menus with null checks
+            const filteredMenus = restaurant.menus.map(menu => ({
+                ...menu,
+                dishes: (menu.dishes || []).filter(dish => 
+                    dish?.category?._id?.toString() === categoryId.toString()
+                )
+            })).filter(menu => menu.dishes && menu.dishes.length > 0);
+
+            await client.close();
+            return res.status(200).json({
+                status: true,
+                data: {
+                    restaurant: {
+                        _id: restaurant._id,
+                        name: restaurant.name,
+                        logo: restaurant.logo
+                    },
+                    menus: filteredMenus
+                }
+            });
+        }
+
+        // If no categoryId provided, group all dishes by category with null checks
+        const categorizedDishes = restaurant.menus.reduce((acc, menu) => {
+            if (!menu.dishes) return acc;
+
+            menu.dishes.forEach(dish => {
+                if (!dish?.category?._id || !dish?.category?.name) return;
+
+                const categoryId = dish.category._id.toString();
+                const categoryName = dish.category.name;
+                
+                if (!acc[categoryId]) {
+                    acc[categoryId] = {
+                        categoryId,
+                        categoryName,
+                        dishes: []
+                    };
+                }
+                
+                acc[categoryId].dishes.push({
+                    ...dish,
+                    menuName: menu.name || 'Unnamed Menu',
+                    menuId: menu._id
+                });
+            });
+            return acc;
+        }, {});
+
+        // Convert to array and sort by category name
+        const sortedCategories = Object.values(categorizedDishes)
+            .sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+
+        await client.close();
+        return res.status(200).json({
+            status: true,
+            data: {
+                restaurant: {
+                    _id: restaurant._id,
+                    name: restaurant.name,
+                    logo: restaurant.logo
+                },
+                categories: sortedCategories
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching menu by category:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error fetching menu by category',
+            details: error.message
+        });
+    }
+};
+
+
 const addDish = async (req, res) => {
     const { 
         name, 
@@ -816,6 +918,7 @@ const editDish = async (req, res) => {
     }
 };
 
+
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish
+    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish,getMenuByCategory
  }
