@@ -559,7 +559,7 @@ const searchMenu = async (req, res) => {
 }
 
 
-const getMenuByCategory = async (req, res) => {
+const filterMenuByCategory = async (req, res) => {
     const { restaurantId, categoryId } = req.body;
 
     try {
@@ -655,6 +655,50 @@ const getMenuByCategory = async (req, res) => {
         res.status(500).json({
             status: false,
             error: 'Error fetching menu by category',
+            details: error.message
+        });
+    }
+};
+
+
+const getMenuCategories = async (req, res) => {
+    try {
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const collection = db.collection('menucategories');
+
+        // Fetch all categories with their subcategories
+        const categories = await collection.find({})
+            .sort({ name: 1 }) // Sort alphabetically by name
+            .toArray();
+
+        // Format the response
+        const formattedCategories = categories.map(category => ({
+            _id: category._id,
+            name: category.name,
+            subcategories: category.subcategories.map(sub => ({
+                _id: sub._id,
+                name: sub.name
+            })).sort((a, b) => a.name.localeCompare(b.name)), // Sort subcategories alphabetically
+            totalSubcategories: category.subcategories.length,
+            createdAt: category.createdAt,
+            updatedAt: category.updatedAt
+        }));
+
+        await client.close();
+
+        res.status(200).json({
+            status: true,
+            data: formattedCategories
+        });
+
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error fetching categories',
             details: error.message
         });
     }
@@ -920,5 +964,5 @@ const editDish = async (req, res) => {
 
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish,getMenuByCategory
+    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish, filterMenuByCategory,getMenuCategories
  }
