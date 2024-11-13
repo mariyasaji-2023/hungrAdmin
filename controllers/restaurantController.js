@@ -659,51 +659,117 @@ const filterMenuByCategory = async (req, res) => {
         });
     }
 };
+const getRestaurantCategories = async (req, res) => {
+    const { restaurantId } = req.body; // or req.body depending on how you send the data
 
-
-const getMenuCategories = async (req, res) => {
     try {
         const client = new MongoClient(uri);
         await client.connect();
         
         const db = client.db('hungerX');
-        const collection = db.collection('menucategories');
+        const restaurantsCollection = db.collection('restaurants');
+        const categoriesCollection = db.collection('menucategories');
 
-        // Fetch all categories with their subcategories
-        const categories = await collection.find({})
-            .sort({ name: 1 }) // Sort alphabetically by name
-            .toArray();
+        // First, find the restaurant and get its menus
+        const restaurant = await restaurantsCollection.findOne({
+            _id: new ObjectId(restaurantId)
+        });
+
+        if (!restaurant) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
+
+        // Get unique category IDs from all dishes in all menus
+        const categoryIds = new Set();
+        restaurant.menus.forEach(menu => {
+            if (menu.dishes && Array.isArray(menu.dishes)) {
+                menu.dishes.forEach(dish => {
+                    if (dish.category && dish.category._id) {
+                        categoryIds.add(dish.category._id.toString());
+                    }
+                });
+            }
+        });
+
+        // Fetch only the categories that are used in this restaurant
+        const categories = await categoriesCollection.find({
+            _id: { 
+                $in: Array.from(categoryIds).map(id => new ObjectId(id)) 
+            }
+        }).sort({ name: 1 }).toArray();
 
         // Format the response
-        const formattedCategories = categories.map(category => ({
-            _id: category._id,
-            name: category.name,
-            subcategories: category.subcategories.map(sub => ({
-                _id: sub._id,
-                name: sub.name
-            })).sort((a, b) => a.name.localeCompare(b.name)), // Sort subcategories alphabetically
-            totalSubcategories: category.subcategories.length,
-            createdAt: category.createdAt,
-            updatedAt: category.updatedAt
-        }));
+        const formattedCategories = categories.map(category => {
+            // Count dishes in this category
+            let dishCount = 0;
+            restaurant.menus.forEach(menu => {
+                if (menu.dishes && Array.isArray(menu.dishes)) {
+                    dishCount += menu.dishes.filter(dish => 
+                        dish.category && 
+                        dish.category._id && 
+                        dish.category._id.toString() === category._id.toString()
+                    ).length;
+                }
+            });
+
+            return {
+                _id: category._id,
+                name: category.name,
+                subcategories: category.subcategories.map(sub => ({
+                    _id: sub._id,
+                    name: sub.name,
+                    dishCount: countDishesInSubcategory(restaurant.menus, sub._id)
+                })).sort((a, b) => a.name.localeCompare(b.name)),
+                totalSubcategories: category.subcategories.length,
+                dishCount,
+                createdAt: category.createdAt,
+                updatedAt: category.updatedAt
+            };
+        });
 
         await client.close();
 
         res.status(200).json({
             status: true,
-            data: formattedCategories
+            data: {
+                restaurant: {
+                    _id: restaurant._id,
+                    name: restaurant.name,
+                    logo: restaurant.logo
+                },
+                categories: formattedCategories
+            }
         });
 
     } catch (error) {
-        console.error('Error fetching categories:', error);
+        console.error('Error fetching restaurant categories:', error);
         res.status(500).json({
             status: false,
-            error: 'Error fetching categories',
+            error: 'Error fetching restaurant categories',
             details: error.message
         });
     }
 };
 
+// Helper function to count dishes in a subcategory
+const countDishesInSubcategory = (menus, subcategoryId) => {
+    let count = 0;
+    menus.forEach(menu => {
+        if (menu.dishes && Array.isArray(menu.dishes)) {
+            count += menu.dishes.filter(dish => 
+                dish.category && 
+                dish.subcategory && 
+                dish.subcategory._id && 
+                dish.subcategory._id.toString() === subcategoryId.toString()
+            ).length;
+        }
+    });
+    return count;
+};
 
 const addDish = async (req, res) => {
     const { 
@@ -964,5 +1030,5 @@ const editDish = async (req, res) => {
 
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish, filterMenuByCategory,getMenuCategories
+    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories
  }
