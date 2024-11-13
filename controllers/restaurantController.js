@@ -771,6 +771,8 @@ const countDishesInSubcategory = (menus, subcategoryId) => {
     return count;
 };
 
+
+
 const addDish = async (req, res) => {
     const { 
         name, 
@@ -783,12 +785,59 @@ const addDish = async (req, res) => {
         fats,
         servingSize,
         servingUnit,
-        categoryId,
-        restaurantId,
-        menuId
+        categoryId,      // MongoDB ObjectId
+        subcategoryId,   // MongoDB ObjectId (Optional)
+        restaurantId,    // MongoDB ObjectId
+        menuId          // Custom format: bk-menu-XXX
     } = req.body;
 
     try {
+        // Required field validation
+        if (!name || !price || !categoryId || !restaurantId || !menuId) {
+            return res.status(400).json({
+                status: false,
+                error: 'Name, price, categoryId, restaurantId, and menuId are required'
+            });
+        }
+
+        // Validate MongoDB ObjectId format
+        const isValidObjectId = (id) => {
+            return ObjectId.isValid(id) && (new ObjectId(id)).toString() === id;
+        };
+
+        // Validate restaurantId
+        if (!isValidObjectId(restaurantId)) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid Restaurant ID format - must be a valid MongoDB ObjectId'
+            });
+        }
+
+        // Validate categoryId
+        if (!isValidObjectId(categoryId)) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid Category ID format - must be a valid MongoDB ObjectId'
+            });
+        }
+
+        // Validate menuId format
+        if (!menuId.startsWith('bk-menu-')) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid Menu ID format - must start with "bk-menu-"'
+            });
+        }
+
+        // Validate subcategoryId if provided
+        if (subcategoryId && !isValidObjectId(subcategoryId)) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid Subcategory ID format - must be a valid MongoDB ObjectId'
+            });
+        }
+
+        // Validate image
         if (!req.file) {
             return res.status(400).json({ 
                 status: false,
@@ -827,55 +876,93 @@ const addDish = async (req, res) => {
 
         // Fetch category details
         const categoryDoc = await categoriesCollection.findOne({ 
-            _id: new ObjectId(categoryId) 
+            _id: new ObjectId(categoryId)
         });
 
         if (!categoryDoc) {
             await client.close();
             return res.status(400).json({
                 status: false,
-                error: 'Invalid category ID'
+                error: 'Category not found'
             });
         }
 
+        // Check subcategory if provided
+        let subcategoryInfo = null;
+        if (subcategoryId) {
+            const subcategory = categoryDoc.subcategories.find(
+                sub => sub._id.toString() === subcategoryId
+            );
+
+            if (!subcategory) {
+                await client.close();
+                return res.status(400).json({
+                    status: false,
+                    error: 'Subcategory not found in the specified category'
+                });
+            }
+
+            subcategoryInfo = {
+                _id: subcategoryId,
+                name: subcategory.name
+            };
+        }
+
+        // Find maximum dish number to generate new ID
+        const dishCounter = restaurant.menus.reduce((max, menu) => {
+            if (!menu.dishes) return max;
+            const menuMax = menu.dishes.reduce((count, dish) => {
+                if (!dish.id) return count;
+                const num = parseInt(dish.id.split('-')[2]);
+                return isNaN(num) ? count : Math.max(count, num);
+            }, 0);
+            return Math.max(max, menuMax);
+        }, 0);
+
+        const newDishId = `bk-dish-${(dishCounter + 1).toString().padStart(3, '0')}`;
+
+        // Create new dish document
         const now = new Date();
         const newDish = {
-            _id: new ObjectId(), // Generate new ObjectId for the dish
+            id: newDishId,
             name,
             image,
             price: parseFloat(price),
-            rating: parseFloat(rating),
-            description,
+            ...(rating && { rating: parseFloat(rating) }),
+            ...(description && { description }),
             category: {
                 _id: categoryId,
                 name: categoryDoc.name
             },
-            servingInfo: {
-                size: parseFloat(servingSize),
-                unit: servingUnit,
-                equivalentTo: `${servingSize} ${servingUnit} of ${name}`
-            },
-            nutritionFacts: {
-                calories: parseInt(calories),
-                totalCarbohydrates: {
-                    value: parseFloat(carbs)
-                },
-                protein: {
-                    value: parseFloat(protein)
-                },
-                totalFat: {
-                    value: parseFloat(fats)
+            ...(subcategoryInfo && { subcategory: subcategoryInfo }),
+            ...(servingSize && servingUnit && {
+                servingInfo: {
+                    size: parseFloat(servingSize),
+                    unit: servingUnit,
+                    equivalentTo: `${servingSize} ${servingUnit} of ${name}`
                 }
+            }),
+            nutritionFacts: {
+                ...(calories && { calories: parseInt(calories) }),
+                ...(carbs && { 
+                    totalCarbohydrates: { value: parseFloat(carbs) }
+                }),
+                ...(protein && { 
+                    protein: { value: parseFloat(protein) }
+                }),
+                ...(fats && { 
+                    totalFat: { value: parseFloat(fats) }
+                })
             },
-            createdAt: formatDate(now),
-            updatedAt: formatDate(now)
+            createdAt: now,
+            updatedAt: now
         };
 
-        // Update the restaurant document by adding the dish to the specific menu
+        // Add dish to menu
         const result = await restaurantsCollection.updateOne(
             { 
                 _id: new ObjectId(restaurantId),
-                "menus._id": menuId
+                "menus.id": menuId
             },
             { 
                 $push: { 
@@ -906,19 +993,50 @@ const addDish = async (req, res) => {
     }
 };
 
+
 const editDish = async (req, res) => {
     try {
         const { 
-            dishId,
-            restaurantId,
-            menuId,
+            dishId,        // Custom format: bk-dish-XXX
+            restaurantId,  // MongoDB ObjectId
+            menuId,        // Custom format: bk-menu-XXX
+            categoryId,    // MongoDB ObjectId (optional)
+            subcategoryId, // MongoDB ObjectId (optional)
             ...updateData 
         } = req.body;
 
+        // Basic validation
         if (!dishId || !restaurantId || !menuId) {
             return res.status(400).json({
                 status: false,
                 error: 'Dish ID, Restaurant ID, and Menu ID are required'
+            });
+        }
+
+        // Validate MongoDB ObjectId format for restaurantId
+        const isValidObjectId = (id) => {
+            return ObjectId.isValid(id) && (new ObjectId(id)).toString() === id;
+        };
+
+        if (!isValidObjectId(restaurantId)) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid Restaurant ID format - must be a valid MongoDB ObjectId'
+            });
+        }
+
+        // Validate custom ID formats
+        if (!menuId.startsWith('bk-menu-')) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid Menu ID format - must start with "bk-menu-"'
+            });
+        }
+
+        if (!dishId.startsWith('bk-dish-')) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid Dish ID format - must start with "bk-dish-"'
             });
         }
 
@@ -929,55 +1047,85 @@ const editDish = async (req, res) => {
         const restaurantsCollection = db.collection('restaurants');
         const categoriesCollection = db.collection('menucategories');
 
-        // Handle category update if provided
-        if (updateData.categoryId) {
+        // Find the restaurant first
+        const restaurant = await restaurantsCollection.findOne({
+            _id: new ObjectId(restaurantId)
+        });
+
+        if (!restaurant) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
+
+        // Handle category and optional subcategory update
+        if (categoryId) {
+            if (!isValidObjectId(categoryId)) {
+                await client.close();
+                return res.status(400).json({
+                    status: false,
+                    error: 'Invalid Category ID format - must be a valid MongoDB ObjectId'
+                });
+            }
+
             const categoryDoc = await categoriesCollection.findOne({ 
-                _id: new ObjectId(updateData.categoryId) 
+                _id: new ObjectId(categoryId)
             });
 
             if (!categoryDoc) {
                 await client.close();
                 return res.status(400).json({
                     status: false,
-                    error: 'Invalid category ID'
+                    error: 'Category not found'
                 });
             }
 
             updateData.category = {
-                _id: updateData.categoryId,
+                _id: categoryId,
                 name: categoryDoc.name
             };
-            delete updateData.categoryId;
+
+            if (subcategoryId) {
+                if (!isValidObjectId(subcategoryId)) {
+                    await client.close();
+                    return res.status(400).json({
+                        status: false,
+                        error: 'Invalid Subcategory ID format - must be a valid MongoDB ObjectId'
+                    });
+                }
+
+                const subcategory = categoryDoc.subcategories.find(
+                    sub => sub._id.toString() === subcategoryId
+                );
+
+                if (!subcategory) {
+                    await client.close();
+                    return res.status(400).json({
+                        status: false,
+                        error: 'Subcategory not found in the specified category'
+                    });
+                }
+
+                updateData.subcategory = {
+                    _id: subcategoryId,
+                    name: subcategory.name
+                };
+            }
         }
 
         // Prepare update fields
         const updateFields = {
             ...(updateData.name && { "menus.$[menu].dishes.$[dish].name": updateData.name }),
             ...(updateData.price && { "menus.$[menu].dishes.$[dish].price": parseFloat(updateData.price) }),
-            ...(updateData.rating && { "menus.$[menu].dishes.$[dish].rating": parseFloat(updateData.rating) }),
             ...(updateData.description && { "menus.$[menu].dishes.$[dish].description": updateData.description }),
             ...(updateData.category && { "menus.$[menu].dishes.$[dish].category": updateData.category }),
-            "menus.$[menu].dishes.$[dish].updatedAt": formatDate(new Date())
+            ...(updateData.subcategory !== undefined && { 
+                "menus.$[menu].dishes.$[dish].subcategory": updateData.subcategory 
+            }),
+            "menus.$[menu].dishes.$[dish].updatedAt": new Date()
         };
-
-        // Handle serving info update
-        if (updateData.servingSize || updateData.servingUnit) {
-            updateFields["menus.$[menu].dishes.$[dish].servingInfo"] = {
-                size: updateData.servingSize ? parseFloat(updateData.servingSize) : undefined,
-                unit: updateData.servingUnit,
-                equivalentTo: `${updateData.servingSize || ""} ${updateData.servingUnit || ""} of ${updateData.name || ""}`
-            };
-        }
-
-        // Handle nutrition facts update
-        if (updateData.calories || updateData.carbs || updateData.protein || updateData.fats) {
-            updateFields["menus.$[menu].dishes.$[dish].nutritionFacts"] = {
-                ...(updateData.calories && { calories: parseInt(updateData.calories) }),
-                ...(updateData.carbs && { totalCarbohydrates: { value: parseFloat(updateData.carbs) } }),
-                ...(updateData.protein && { protein: { value: parseFloat(updateData.protein) } }),
-                ...(updateData.fats && { totalFat: { value: parseFloat(updateData.fats) } })
-            };
-        }
 
         // Handle image upload
         if (req.file) {
@@ -992,14 +1140,14 @@ const editDish = async (req, res) => {
             updateFields["menus.$[menu].dishes.$[dish].image"] = image;
         }
 
-        // Update the dish within the restaurant's menu
+        // Update the dish
         const result = await restaurantsCollection.updateOne(
             { _id: new ObjectId(restaurantId) },
             { $set: updateFields },
             {
                 arrayFilters: [
-                    { "menu._id": menuId },
-                    { "dish._id": new ObjectId(dishId) }
+                    { "menu.id": menuId },
+                    { "dish.id": dishId }
                 ]
             }
         );
@@ -1027,7 +1175,6 @@ const editDish = async (req, res) => {
         });
     }
 };
-
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
     getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories
