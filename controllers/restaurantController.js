@@ -659,6 +659,8 @@ const filterMenuByCategory = async (req, res) => {
         });
     }
 };
+
+
 const getRestaurantCategories = async (req, res) => {
     const { restaurantId } = req.body; // or req.body depending on how you send the data
 
@@ -771,6 +773,77 @@ const countDishesInSubcategory = (menus, subcategoryId) => {
     return count;
 };
 
+
+const getAllMenuCategoriesAndSubcategories = async (req, res) => {
+    try {
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const categoriesCollection = db.collection('menucategories');
+
+        // Fetch all categories from menucategories collection
+        const categories = await categoriesCollection.find({})
+            .sort({ name: 1 }) // Sort categories alphabetically
+            .toArray();
+
+        // Format the response
+        const formattedCategories = categories.map(category => ({
+            _id: category._id,
+            name: category.name,
+            subcategories: (category.subcategories || []).map(sub => ({
+                _id: sub._id,
+                name: sub.name,
+                createdAt: sub.createdAt || null,
+                updatedAt: sub.updatedAt || null
+            })).sort((a, b) => a.name.localeCompare(b.name)), // Sort subcategories alphabetically
+            totalSubcategories: (category.subcategories || []).length,
+            createdAt: category.createdAt || null,
+            updatedAt: category.updatedAt || null
+        }));
+
+        // Optional: Group categories by first letter
+        const categoriesByLetter = formattedCategories.reduce((acc, category) => {
+            const firstLetter = category.name.charAt(0).toUpperCase();
+            if (!acc[firstLetter]) {
+                acc[firstLetter] = [];
+            }
+            acc[firstLetter].push(category);
+            return acc;
+        }, {});
+
+        // Convert to array and sort alphabetically
+        const groupedCategories = Object.entries(categoriesByLetter)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([letter, categories]) => ({
+                letter,
+                categories
+            }));
+
+        await client.close();
+
+        res.status(200).json({
+            status: true,
+            data: {
+                totalCategories: formattedCategories.length,
+                totalSubcategories: formattedCategories.reduce(
+                    (sum, cat) => sum + cat.totalSubcategories, 0
+                ),
+                // You can choose to return either or both formats
+                categories: formattedCategories,          // Flat list
+                categoriesGrouped: groupedCategories      // Grouped by letter
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error fetching categories',
+            details: error.message
+        });
+    }
+};
 
 
 const addDish = async (req, res) => {
@@ -1177,5 +1250,6 @@ const editDish = async (req, res) => {
 };
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories
+    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories,
+    getAllMenuCategoriesAndSubcategories
  }
