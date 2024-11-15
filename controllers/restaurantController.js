@@ -346,15 +346,15 @@ const getRestaurantMenu = async(req,res)=>{
     }
 }
 
-const createmenuCategory = async (req, res) => {
-    const { name } = req.body;
+
+const createMenuCategory = async (req, res) => {
+    const { name, restaurantId } = req.body;
 
     try {
-        // Input validation
-        if (!name) {
+        if (!name || !restaurantId) {
             return res.status(400).json({
                 status: false,
-                error: 'Category name is required'
+                error: 'Category name and restaurant ID are required'
             });
         }
 
@@ -362,38 +362,55 @@ const createmenuCategory = async (req, res) => {
         await client.connect();
         
         const db = client.db('hungerX');
-        const collection = db.collection('menucategories');
+        const restaurantsCollection = db.collection('restaurants');
 
-        // Check if category already exists
-        const existingCategory = await collection.findOne({ name: name });
-        if (existingCategory) {
+        // Find the restaurant
+        const restaurant = await restaurantsCollection.findOne({ 
+            _id: new ObjectId(restaurantId)
+        });
+
+        if (!restaurant) {
             await client.close();
-            return res.status(400).json({
+            return res.status(404).json({
                 status: false,
-                error: 'Category already exists'
+                error: 'Restaurant not found'
             });
         }
 
-        // Create category document
+        // Check if category already exists in the restaurant
+        if (restaurant.menuCategories && restaurant.menuCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
+            await client.close();
+            return res.status(400).json({
+                status: false,
+                error: 'Category already exists in this restaurant'
+            });
+        }
+
+        // Create category document with MongoDB ObjectId
         const categoryDoc = {
+            _id: new ObjectId(), // Using MongoDB ObjectId
             name,
             subcategories: [],
             createdAt: new Date(),
             updatedAt: new Date()
         };
 
-        // Insert the category
-        const result = await collection.insertOne(categoryDoc);
+        // Add category to restaurant
+        const result = await restaurantsCollection.updateOne(
+            { _id: new ObjectId(restaurantId) },
+            { 
+                $push: { menuCategories: categoryDoc },
+                $set: { updatedAt: new Date() }
+            }
+        );
+
         await client.close();
 
-        if (result.insertedId) {
+        if (result.modifiedCount > 0) {
             res.status(201).json({
                 status: true,
                 message: 'Category created successfully',
-                category: {
-                    _id: result.insertedId,
-                    ...categoryDoc
-                }
+                category: categoryDoc
             });
         } else {
             throw new Error('Failed to create category');
@@ -409,16 +426,14 @@ const createmenuCategory = async (req, res) => {
     }
 };
 
-// Create Subcategory
 const createMenuSubcategory = async (req, res) => {
-    const { categoryId, name } = req.body;
+    const { categoryId, name, restaurantId } = req.body;
 
     try {
-        // Input validation
-        if (!categoryId || !name) {
+        if (!categoryId || !name || !restaurantId) {
             return res.status(400).json({
                 status: false,
-                error: 'Category ID and subcategory name are required'
+                error: 'Category ID, subcategory name, and restaurant ID are required'
             });
         }
 
@@ -426,27 +441,34 @@ const createMenuSubcategory = async (req, res) => {
         await client.connect();
         
         const db = client.db('hungerX');
-        const collection = db.collection('menucategories');
+        const restaurantsCollection = db.collection('restaurants');
 
-        // Check if category exists
-        const category = await collection.findOne({ 
-            _id: new ObjectId(categoryId)
+        // Find the restaurant
+        const restaurant = await restaurantsCollection.findOne({ 
+            _id: new ObjectId(restaurantId)
         });
+
+        if (!restaurant) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
+
+        // Find the category using MongoDB ObjectId
+        const category = restaurant.menuCategories?.find(cat => cat._id.toString() === categoryId);
 
         if (!category) {
             await client.close();
             return res.status(404).json({
                 status: false,
-                error: 'Category not found'
+                error: 'Category not found in this restaurant'
             });
         }
 
         // Check if subcategory already exists
-        const subcategoryExists = category.subcategories.some(
-            sub => sub.name.toLowerCase() === name.toLowerCase()
-        );
-
-        if (subcategoryExists) {
+        if (category.subcategories.some(sub => sub.name.toLowerCase() === name.toLowerCase())) {
             await client.close();
             return res.status(400).json({
                 status: false,
@@ -454,31 +476,36 @@ const createMenuSubcategory = async (req, res) => {
             });
         }
 
-        // Create subcategory document
+        // Create subcategory document with MongoDB ObjectId
         const subcategoryDoc = {
-            _id: new ObjectId(),
+            _id: new ObjectId(), // Using MongoDB ObjectId
             name,
             createdAt: new Date(),
             updatedAt: new Date()
         };
 
-        // Add subcategory to category
-        const result = await collection.findOneAndUpdate(
-            { _id: new ObjectId(categoryId) },
+        // Add subcategory to the category in the restaurant
+        const result = await restaurantsCollection.updateOne(
             { 
-                $push: { subcategories: subcategoryDoc },
-                $set: { updatedAt: new Date() }
+                _id: new ObjectId(restaurantId),
+                "menuCategories._id": new ObjectId(categoryId)  // Fixed field name
             },
-            { returnDocument: 'after' }
+            { 
+                $push: { "menuCategories.$.subcategories": subcategoryDoc },  // Fixed field name
+                $set: { 
+                    "menuCategories.$.updatedAt": new Date(),  // Fixed field name
+                    updatedAt: new Date()
+                }
+            }
         );
 
         await client.close();
 
-        if (result) {
+        if (result.modifiedCount > 0) {
             res.status(201).json({
                 status: true,
                 message: 'Subcategory created successfully',
-                category: result
+                subcategory: subcategoryDoc
             });
         } else {
             throw new Error('Failed to create subcategory');
@@ -1250,6 +1277,6 @@ const editDish = async (req, res) => {
 };
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,createmenuCategory,createMenuSubcategory,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories,
+    getRestaurantMenu,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories,createMenuCategory,createMenuSubcategory,
     getAllMenuCategoriesAndSubcategories
  }

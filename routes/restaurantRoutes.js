@@ -10,7 +10,7 @@ router.post('/addRestaurant', upload.single('logo'),restaurantController.addRest
 router.put('/editRestaurant', upload.single('logo'),restaurantController.editRestaurant)
 router.post('/searchRestuarant',restaurantController.searchRestaurant)
 router.post('/getMenu',restaurantController.getRestaurantMenu)
-router.post('/addMenuCategory',restaurantController.createmenuCategory)
+router.post('/addMenuCategory',restaurantController.createMenuCategory)
 router.post('/addMenuSubcategory',restaurantController.createMenuSubcategory)
 router.post('/searchMenu',restaurantController.searchMenu)
 router.post('/filterMenu',restaurantController.filterMenuByCategory)
