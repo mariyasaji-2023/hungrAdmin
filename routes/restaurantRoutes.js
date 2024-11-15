@@ -18,6 +18,9 @@ router.post('/getMenuCategory',restaurantController.getRestaurantCategories)
 router.post('/getCategoryandSubcategories',restaurantController.getAllMenuCategoriesAndSubcategories)
 router.post('/addDish',upload.single('image'),restaurantController.addDish)
 router.put('/editDish',upload.single('image'),restaurantController.editDish)
+router.post('/addDishToCategory',restaurantController.addDishToCategory)
+router.post('/getAllMenuCategory',restaurantController.getAllMenuCategories)
+
 
 module.exports = router;
 

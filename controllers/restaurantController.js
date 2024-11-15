@@ -872,6 +872,146 @@ const getAllMenuCategoriesAndSubcategories = async (req, res) => {
     }
 };
 
+const addDishToCategory = async (req, res) => {
+    const { 
+        restaurantId,
+        menuId,
+        categoryId,
+        dishId
+    } = req.body;
+
+    try {
+        if (!restaurantId || !menuId || !categoryId || !dishId) {
+            return res.status(400).json({
+                status: false,
+                error: 'Restaurant ID, menu ID, category ID, and dish ID are required'
+            });
+        }
+
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const restaurantsCollection = db.collection('restaurants');
+
+        // Find the restaurant and validate the document structure
+        const restaurant = await restaurantsCollection.findOne({ 
+            _id: new ObjectId(restaurantId)
+        });
+
+        if (!restaurant) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
+
+        // Find the menu and dish in the restaurants.menus array
+        const menu = restaurant.menus?.find(m => m.id === menuId);
+        if (!menu) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Menu not found in restaurant'
+            });
+        }
+
+        const dish = menu.dishes?.find(d => d.id === dishId);
+        if (!dish) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Dish not found in menu'
+            });
+        }
+
+        // Find the category
+        const category = restaurant.menuCategories?.find(
+            cat => cat._id.toString() === categoryId
+        );
+        if (!category) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Category not found in restaurant'
+            });
+        }
+
+        // Check if dish already exists in any category
+        const existingDishInCategories = restaurant.menuCategories?.some(cat => 
+            cat.dishes?.some(d => d.id === dishId)
+        );
+
+        if (existingDishInCategories) {
+            await client.close();
+            return res.status(400).json({
+                status: false,
+                error: 'Dish already exists in a category'
+            });
+        }
+
+        // Create the dish document with category info
+        const dishWithCategory = {
+            ...dish,
+            categoryInfo: {
+                categoryId: new ObjectId(categoryId),
+                categoryName: category.name
+            },
+            updatedAt: new Date()
+        };
+
+        // Initialize dishes array if it doesn't exist
+        const initializeResult = await restaurantsCollection.updateOne(
+            { 
+                _id: new ObjectId(restaurantId),
+                'menuCategories._id': new ObjectId(categoryId),
+                'menuCategories.dishes': { $exists: false }
+            },
+            { 
+                $set: { 'menuCategories.$.dishes': [] }
+            }
+        );
+
+        // Add the dish to the category
+        const result = await restaurantsCollection.updateOne(
+            { 
+                _id: new ObjectId(restaurantId),
+                'menuCategories._id': new ObjectId(categoryId)
+            },
+            { 
+                $push: { 
+                    'menuCategories.$.dishes': dishWithCategory
+                },
+                $set: { 
+                    updatedAt: new Date(),
+                    'menuCategories.$.updatedAt': new Date()
+                }
+            }
+        );
+
+        await client.close();
+
+        if (result.modifiedCount > 0 || initializeResult.modifiedCount > 0) {
+            res.status(200).json({
+                status: true,
+                message: 'Dish added to category successfully',
+                dish: dishWithCategory
+            });
+        } else {
+            throw new Error('Failed to add dish to category');
+        }
+
+    } catch (error) {
+        console.error('Error adding dish to category:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error adding dish to category',
+            details: error.message
+        });
+    }
+};
+
 
 const addDish = async (req, res) => {
     const { 
@@ -1276,7 +1416,62 @@ const editDish = async (req, res) => {
     }
 };
 
+
+const getAllMenuCategories = async (req, res) => {
+    const { restaurantId } = req.body; // Get restaurantId from URL params
+
+    try {
+        if (!restaurantId || !ObjectId.isValid(restaurantId)) {
+            return res.status(400).json({
+                status: false,
+                error: 'Valid restaurant ID is required'
+            });
+        }
+
+        const client = new MongoClient(uri);
+        await client.connect();
+        
+        const db = client.db('hungerX');
+        const restaurantsCollection = db.collection('restaurants');
+
+        // Find the restaurant and project only menuCategories with _id and name
+        const restaurant = await restaurantsCollection.findOne(
+            { _id: new ObjectId(restaurantId) },
+            { projection: { 'menuCategories._id': 1, 'menuCategories.name': 1 } }
+        );
+
+        await client.close();
+
+        if (!restaurant) {
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            });
+        }
+
+        // Extract and format menu categories
+        const menuCategories = restaurant.menuCategories?.map(category => ({
+            _id: category._id,
+            name: category.name
+        })) || [];
+
+        return res.status(200).json({
+            status: true,
+            menuCategories
+        });
+
+    } catch (error) {
+        console.error('Error fetching menu categories:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error fetching menu categories',
+            details: error.message
+        });
+    }
+};
+
+
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
     getRestaurantMenu,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories,createMenuCategory,createMenuSubcategory,
-    getAllMenuCategoriesAndSubcategories
+    getAllMenuCategoriesAndSubcategories,addDishToCategory,getAllMenuCategories
  }
