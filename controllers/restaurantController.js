@@ -785,20 +785,20 @@ const filterMenuByCategory = async (req, res) => {
 // };
 
 // Helper function to count dishes in a subcategory
-const countDishesInSubcategory = (menus, subcategoryId) => {
-    let count = 0;
-    menus.forEach(menu => {
-        if (menu.dishes && Array.isArray(menu.dishes)) {
-            count += menu.dishes.filter(dish => 
-                dish.category && 
-                dish.subcategory && 
-                dish.subcategory._id && 
-                dish.subcategory._id.toString() === subcategoryId.toString()
-            ).length;
-        }
-    });
-    return count;
-};
+// const countDishesInSubcategory = (menus, subcategoryId) => {
+//     let count = 0;
+//     menus.forEach(menu => {
+//         if (menu.dishes && Array.isArray(menu.dishes)) {
+//             count += menu.dishes.filter(dish => 
+//                 dish.category && 
+//                 dish.subcategory && 
+//                 dish.subcategory._id && 
+//                 dish.subcategory._id.toString() === subcategoryId.toString()
+//             ).length;
+//         }
+//     });
+//     return count;
+// };
 
 
 const getAllMenuCategoriesAndSubcategories = async (req, res) => {
@@ -1472,6 +1472,6 @@ const getAllMenuCategories = async (req, res) => {
 
 
 module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,searchMenu,editDish,addDish, filterMenuByCategory,getRestaurantCategories,createMenuCategory,createMenuSubcategory,
+    getRestaurantMenu,searchMenu,editDish,addDish, filterMenuByCategory,createMenuCategory,createMenuSubcategory,
     getAllMenuCategoriesAndSubcategories,addDishToCategory,getAllMenuCategories
  }
