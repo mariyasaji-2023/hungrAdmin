@@ -688,101 +688,101 @@ const filterMenuByCategory = async (req, res) => {
 };
 
 
-const getRestaurantCategories = async (req, res) => {
-    const { restaurantId } = req.body; // or req.body depending on how you send the data
+// const getRestaurantCategories = async (req, res) => {
+//     const { restaurantId } = req.body; // or req.body depending on how you send the data
 
-    try {
-        const client = new MongoClient(uri);
-        await client.connect();
+//     try {
+//         const client = new MongoClient(uri);
+//         await client.connect();
         
-        const db = client.db('hungerX');
-        const restaurantsCollection = db.collection('restaurants');
-        const categoriesCollection = db.collection('menucategories');
+//         const db = client.db('hungerX');
+//         const restaurantsCollection = db.collection('restaurants');
+//         const categoriesCollection = db.collection('menucategories');
 
-        // First, find the restaurant and get its menus
-        const restaurant = await restaurantsCollection.findOne({
-            _id: new ObjectId(restaurantId)
-        });
+//         // First, find the restaurant and get its menus
+//         const restaurant = await restaurantsCollection.findOne({
+//             _id: new ObjectId(restaurantId)
+//         });
 
-        if (!restaurant) {
-            await client.close();
-            return res.status(404).json({
-                status: false,
-                error: 'Restaurant not found'
-            });
-        }
+//         if (!restaurant) {
+//             await client.close();
+//             return res.status(404).json({
+//                 status: false,
+//                 error: 'Restaurant not found'
+//             });
+//         }
 
-        // Get unique category IDs from all dishes in all menus
-        const categoryIds = new Set();
-        restaurant.menus.forEach(menu => {
-            if (menu.dishes && Array.isArray(menu.dishes)) {
-                menu.dishes.forEach(dish => {
-                    if (dish.category && dish.category._id) {
-                        categoryIds.add(dish.category._id.toString());
-                    }
-                });
-            }
-        });
+//         // Get unique category IDs from all dishes in all menus
+//         const categoryIds = new Set();
+//         restaurant.menus.forEach(menu => {
+//             if (menu.dishes && Array.isArray(menu.dishes)) {
+//                 menu.dishes.forEach(dish => {
+//                     if (dish.category && dish.category._id) {
+//                         categoryIds.add(dish.category._id.toString());
+//                     }
+//                 });
+//             }
+//         });
 
-        // Fetch only the categories that are used in this restaurant
-        const categories = await categoriesCollection.find({
-            _id: { 
-                $in: Array.from(categoryIds).map(id => new ObjectId(id)) 
-            }
-        }).sort({ name: 1 }).toArray();
+//         // Fetch only the categories that are used in this restaurant
+//         const categories = await categoriesCollection.find({
+//             _id: { 
+//                 $in: Array.from(categoryIds).map(id => new ObjectId(id)) 
+//             }
+//         }).sort({ name: 1 }).toArray();
 
-        // Format the response
-        const formattedCategories = categories.map(category => {
-            // Count dishes in this category
-            let dishCount = 0;
-            restaurant.menus.forEach(menu => {
-                if (menu.dishes && Array.isArray(menu.dishes)) {
-                    dishCount += menu.dishes.filter(dish => 
-                        dish.category && 
-                        dish.category._id && 
-                        dish.category._id.toString() === category._id.toString()
-                    ).length;
-                }
-            });
+//         // Format the response
+//         const formattedCategories = categories.map(category => {
+//             // Count dishes in this category
+//             let dishCount = 0;
+//             restaurant.menus.forEach(menu => {
+//                 if (menu.dishes && Array.isArray(menu.dishes)) {
+//                     dishCount += menu.dishes.filter(dish => 
+//                         dish.category && 
+//                         dish.category._id && 
+//                         dish.category._id.toString() === category._id.toString()
+//                     ).length;
+//                 }
+//             });
 
-            return {
-                _id: category._id,
-                name: category.name,
-                subcategories: category.subcategories.map(sub => ({
-                    _id: sub._id,
-                    name: sub.name,
-                    dishCount: countDishesInSubcategory(restaurant.menus, sub._id)
-                })).sort((a, b) => a.name.localeCompare(b.name)),
-                totalSubcategories: category.subcategories.length,
-                dishCount,
-                createdAt: category.createdAt,
-                updatedAt: category.updatedAt
-            };
-        });
+//             return {
+//                 _id: category._id,
+//                 name: category.name,
+//                 subcategories: category.subcategories.map(sub => ({
+//                     _id: sub._id,
+//                     name: sub.name,
+//                     dishCount: countDishesInSubcategory(restaurant.menus, sub._id)
+//                 })).sort((a, b) => a.name.localeCompare(b.name)),
+//                 totalSubcategories: category.subcategories.length,
+//                 dishCount,
+//                 createdAt: category.createdAt,
+//                 updatedAt: category.updatedAt
+//             };
+//         });
 
-        await client.close();
+//         await client.close();
 
-        res.status(200).json({
-            status: true,
-            data: {
-                restaurant: {
-                    _id: restaurant._id,
-                    name: restaurant.name,
-                    logo: restaurant.logo
-                },
-                categories: formattedCategories
-            }
-        });
+//         res.status(200).json({
+//             status: true,
+//             data: {
+//                 restaurant: {
+//                     _id: restaurant._id,
+//                     name: restaurant.name,
+//                     logo: restaurant.logo
+//                 },
+//                 categories: formattedCategories
+//             }
+//         });
 
-    } catch (error) {
-        console.error('Error fetching restaurant categories:', error);
-        res.status(500).json({
-            status: false,
-            error: 'Error fetching restaurant categories',
-            details: error.message
-        });
-    }
-};
+//     } catch (error) {
+//         console.error('Error fetching restaurant categories:', error);
+//         res.status(500).json({
+//             status: false,
+//             error: 'Error fetching restaurant categories',
+//             details: error.message
+//         });
+//     }
+// };
 
 // Helper function to count dishes in a subcategory
 const countDishesInSubcategory = (menus, subcategoryId) => {
