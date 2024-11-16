@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
-const { MongoClient,ObjectId } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 const Category = require('../models/categoryModel')
 const Restaurant = mongoose.model('Restaurant', new mongoose.Schema({}, { strict: false }));
 const upload = require('../middlewares/multer')
@@ -13,16 +13,16 @@ const getRestaurantNames = async (req, res) => {
         console.log("Connected to MongoDB");
         const db = client.db('hungerX');
         const collection = db.collection('restaurants');
-        const restaurants = await collection.find({}, { 
-            projection: { 
-                name: 1, 
+        const restaurants = await collection.find({}, {
+            projection: {
+                name: 1,
                 logo: 1,
                 rating: 1,
                 description: 1,
                 category: 1,
                 createdAt: 1,
-                updatedAt: 1 
-            } 
+                updatedAt: 1
+            }
         }).toArray();
 
         // Format dates for each restaurant
@@ -46,16 +46,16 @@ const getRestaurantNames = async (req, res) => {
 // Helper function to format date and time
 const formatDateTime = (dateString) => {
     const date = new Date(dateString);
-    
+
     // Format date as DD-MM-YYYY
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
-    
+
     // Format time as HH.MM
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
-    
+
     return `${day}-${month}-${year}, ${hours}.${minutes}`;
 }
 
@@ -67,7 +67,7 @@ const addCategory = async (req, res) => {
         res.status(201).json({
             status: true,
             data: {
-                message: 'category added successfully', 
+                message: 'category added successfully',
                 category: {
                     id: category._id,
                     name: category.name
@@ -127,30 +127,30 @@ const addRestaurant = async (req, res) => {
 
     try {
         if (!req.file) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 status: false,
-                error: 'No logo file provided' 
+                error: 'No logo file provided'
             });
         }
 
         const logo = req.file.location;
-        
+
         if (!logo) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 status: false,
-                error: 'Logo upload failed' 
+                error: 'Logo upload failed'
             });
         }
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
         const categoriesCollection = db.collection('categories');
 
-        const categoryDoc = await categoriesCollection.findOne({ 
-            _id: new ObjectId(categoryId) 
+        const categoryDoc = await categoriesCollection.findOne({
+            _id: new ObjectId(categoryId)
         });
 
         if (!categoryDoc) {
@@ -193,10 +193,10 @@ const addRestaurant = async (req, res) => {
 
     } catch (error) {
         console.error('Error adding restaurant:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             status: false,
             error: 'Error adding restaurant',
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -204,7 +204,7 @@ const addRestaurant = async (req, res) => {
 const editRestaurant = async (req, res) => {
     try {
         console.log('Request body:', req.body);
-        
+
         const restaurantId = req.body.restaurantId;
         console.log('Received restaurantId:', restaurantId);
 
@@ -217,22 +217,22 @@ const editRestaurant = async (req, res) => {
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
         const categoriesCollection = db.collection('categories');
 
-        const existingRestaurant = await restaurantsCollection.findOne({ 
-            _id: new ObjectId(restaurantId) 
+        const existingRestaurant = await restaurantsCollection.findOne({
+            _id: new ObjectId(restaurantId)
         });
 
         console.log('Found restaurant:', existingRestaurant);
 
         if (!existingRestaurant) {
             await client.close();
-            return res.status(404).json({ 
+            return res.status(404).json({
                 status: false,
-                error: 'Restaurant not found' 
+                error: 'Restaurant not found'
             });
         }
 
@@ -241,8 +241,8 @@ const editRestaurant = async (req, res) => {
         };
 
         if (req.body.category) {
-            const categoryDoc = await categoriesCollection.findOne({ 
-                _id: new ObjectId(req.body.category) 
+            const categoryDoc = await categoriesCollection.findOne({
+                _id: new ObjectId(req.body.category)
             });
 
             if (!categoryDoc) {
@@ -267,9 +267,9 @@ const editRestaurant = async (req, res) => {
             const logo = req.file.location;
             if (!logo) {
                 await client.close();
-                return res.status(400).json({ 
+                return res.status(400).json({
                     status: false,
-                    error: 'Logo upload failed' 
+                    error: 'Logo upload failed'
                 });
             }
             updateFields.logo = logo;
@@ -300,10 +300,10 @@ const editRestaurant = async (req, res) => {
 
     } catch (error) {
         console.error('Error updating restaurant:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             status: false,
             error: 'Error updating restaurant',
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -324,20 +324,20 @@ const searchRestaurant = async (req, res) => {
     }
 }
 
-const getRestaurantMenu = async(req,res)=>{
-    const {restaurantId} = req.body
+const getRestaurantMenu = async (req, res) => {
+    const { restaurantId } = req.body
     try {
-        const restaurant = await Restaurant.findById({_id:restaurantId});
+        const restaurant = await Restaurant.findById({ _id: restaurantId });
         console.log(restaurant);
-        
+
         if (!restaurant) {
             return res.status(404).json({ error: 'Restaurant not found' });
         }
         res.status(200).json({
-            status:true,
+            status: true,
             data: {
                 name: restaurant.name,
-                menu: restaurant.menus 
+                menu: restaurant.menus
             }
         })
     } catch (error) {
@@ -360,12 +360,12 @@ const createMenuCategory = async (req, res) => {
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
 
         // Find the restaurant
-        const restaurant = await restaurantsCollection.findOne({ 
+        const restaurant = await restaurantsCollection.findOne({
             _id: new ObjectId(restaurantId)
         });
 
@@ -398,7 +398,7 @@ const createMenuCategory = async (req, res) => {
         // Add category to restaurant
         const result = await restaurantsCollection.updateOne(
             { _id: new ObjectId(restaurantId) },
-            { 
+            {
                 $push: { menuCategories: categoryDoc },
                 $set: { updatedAt: new Date() }
             }
@@ -439,12 +439,12 @@ const createMenuSubcategory = async (req, res) => {
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
 
         // Find the restaurant
-        const restaurant = await restaurantsCollection.findOne({ 
+        const restaurant = await restaurantsCollection.findOne({
             _id: new ObjectId(restaurantId)
         });
 
@@ -486,13 +486,13 @@ const createMenuSubcategory = async (req, res) => {
 
         // Add subcategory to the category in the restaurant
         const result = await restaurantsCollection.updateOne(
-            { 
+            {
                 _id: new ObjectId(restaurantId),
                 "menuCategories._id": new ObjectId(categoryId)  // Fixed field name
             },
-            { 
+            {
                 $push: { "menuCategories.$.subcategories": subcategoryDoc },  // Fixed field name
-                $set: { 
+                $set: {
                     "menuCategories.$.updatedAt": new Date(),  // Fixed field name
                     updatedAt: new Date()
                 }
@@ -533,7 +533,7 @@ const searchMenu = async (req, res) => {
 
     try {
         const restaurant = await Restaurant.findById(restaurantId);
-        
+
         if (!restaurant) {
             return res.status(404).json({
                 status: false,
@@ -543,7 +543,7 @@ const searchMenu = async (req, res) => {
 
         // Create a case-insensitive search through all menus and dishes
         const searchResults = restaurant.menus.reduce((results, menu) => {
-            const matchingDishes = menu.dishes.filter(dish => 
+            const matchingDishes = menu.dishes.filter(dish =>
                 dish.name.toLowerCase().includes(query.toLowerCase())
             );
 
@@ -570,7 +570,7 @@ const searchMenu = async (req, res) => {
                     updatedAt: restaurant.updatedAt
                 },
                 results: searchResults,
-                totalResults: searchResults.reduce((total, menu) => 
+                totalResults: searchResults.reduce((total, menu) =>
                     total + menu.dishes.length, 0
                 )
             }
@@ -592,7 +592,7 @@ const filterMenuByCategory = async (req, res) => {
     try {
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
 
@@ -614,7 +614,7 @@ const filterMenuByCategory = async (req, res) => {
             // Filter dishes by category across all menus with null checks
             const filteredMenus = restaurant.menus.map(menu => ({
                 ...menu,
-                dishes: (menu.dishes || []).filter(dish => 
+                dishes: (menu.dishes || []).filter(dish =>
                     dish?.category?._id?.toString() === categoryId.toString()
                 )
             })).filter(menu => menu.dishes && menu.dishes.length > 0);
@@ -642,7 +642,7 @@ const filterMenuByCategory = async (req, res) => {
 
                 const categoryId = dish.category._id.toString();
                 const categoryName = dish.category.name;
-                
+
                 if (!acc[categoryId]) {
                     acc[categoryId] = {
                         categoryId,
@@ -650,7 +650,7 @@ const filterMenuByCategory = async (req, res) => {
                         dishes: []
                     };
                 }
-                
+
                 acc[categoryId].dishes.push({
                     ...dish,
                     menuName: menu.name || 'Unnamed Menu',
@@ -694,7 +694,7 @@ const filterMenuByCategory = async (req, res) => {
 //     try {
 //         const client = new MongoClient(uri);
 //         await client.connect();
-        
+
 //         const db = client.db('hungerX');
 //         const restaurantsCollection = db.collection('restaurants');
 //         const categoriesCollection = db.collection('menucategories');
@@ -801,79 +801,79 @@ const filterMenuByCategory = async (req, res) => {
 // };
 
 
-const getAllMenuCategoriesAndSubcategories = async (req, res) => {
-    try {
-        const client = new MongoClient(uri);
-        await client.connect();
-        
-        const db = client.db('hungerX');
-        const categoriesCollection = db.collection('menucategories');
+// const getAllMenuCategoriesAndSubcategories = async (req, res) => {
+//     try {
+//         const client = new MongoClient(uri);
+//         await client.connect();
 
-        // Fetch all categories from menucategories collection
-        const categories = await categoriesCollection.find({})
-            .sort({ name: 1 }) // Sort categories alphabetically
-            .toArray();
+//         const db = client.db('hungerX');
+//         const categoriesCollection = db.collection('menucategories');
 
-        // Format the response
-        const formattedCategories = categories.map(category => ({
-            _id: category._id,
-            name: category.name,
-            subcategories: (category.subcategories || []).map(sub => ({
-                _id: sub._id,
-                name: sub.name,
-                createdAt: sub.createdAt || null,
-                updatedAt: sub.updatedAt || null
-            })).sort((a, b) => a.name.localeCompare(b.name)), // Sort subcategories alphabetically
-            totalSubcategories: (category.subcategories || []).length,
-            createdAt: category.createdAt || null,
-            updatedAt: category.updatedAt || null
-        }));
+//         // Fetch all categories from menucategories collection
+//         const categories = await categoriesCollection.find({})
+//             .sort({ name: 1 }) // Sort categories alphabetically
+//             .toArray();
 
-        // Optional: Group categories by first letter
-        const categoriesByLetter = formattedCategories.reduce((acc, category) => {
-            const firstLetter = category.name.charAt(0).toUpperCase();
-            if (!acc[firstLetter]) {
-                acc[firstLetter] = [];
-            }
-            acc[firstLetter].push(category);
-            return acc;
-        }, {});
+//         // Format the response
+//         const formattedCategories = categories.map(category => ({
+//             _id: category._id,
+//             name: category.name,
+//             subcategories: (category.subcategories || []).map(sub => ({
+//                 _id: sub._id,
+//                 name: sub.name,
+//                 createdAt: sub.createdAt || null,
+//                 updatedAt: sub.updatedAt || null
+//             })).sort((a, b) => a.name.localeCompare(b.name)), // Sort subcategories alphabetically
+//             totalSubcategories: (category.subcategories || []).length,
+//             createdAt: category.createdAt || null,
+//             updatedAt: category.updatedAt || null
+//         }));
 
-        // Convert to array and sort alphabetically
-        const groupedCategories = Object.entries(categoriesByLetter)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([letter, categories]) => ({
-                letter,
-                categories
-            }));
+//         // Optional: Group categories by first letter
+//         const categoriesByLetter = formattedCategories.reduce((acc, category) => {
+//             const firstLetter = category.name.charAt(0).toUpperCase();
+//             if (!acc[firstLetter]) {
+//                 acc[firstLetter] = [];
+//             }
+//             acc[firstLetter].push(category);
+//             return acc;
+//         }, {});
 
-        await client.close();
+//         // Convert to array and sort alphabetically
+//         const groupedCategories = Object.entries(categoriesByLetter)
+//             .sort(([a], [b]) => a.localeCompare(b))
+//             .map(([letter, categories]) => ({
+//                 letter,
+//                 categories
+//             }));
 
-        res.status(200).json({
-            status: true,
-            data: {
-                totalCategories: formattedCategories.length,
-                totalSubcategories: formattedCategories.reduce(
-                    (sum, cat) => sum + cat.totalSubcategories, 0
-                ),
-                // You can choose to return either or both formats
-                categories: formattedCategories,          // Flat list
-                categoriesGrouped: groupedCategories      // Grouped by letter
-            }
-        });
+//         await client.close();
 
-    } catch (error) {
-        console.error('Error fetching categories:', error);
-        res.status(500).json({
-            status: false,
-            error: 'Error fetching categories',
-            details: error.message
-        });
-    }
-};
+//         res.status(200).json({
+//             status: true,
+//             data: {
+//                 totalCategories: formattedCategories.length,
+//                 totalSubcategories: formattedCategories.reduce(
+//                     (sum, cat) => sum + cat.totalSubcategories, 0
+//                 ),
+//                 // You can choose to return either or both formats
+//                 categories: formattedCategories,          // Flat list
+//                 categoriesGrouped: groupedCategories      // Grouped by letter
+//             }
+//         });
+
+//     } catch (error) {
+//         console.error('Error fetching categories:', error);
+//         res.status(500).json({
+//             status: false,
+//             error: 'Error fetching categories',
+//             details: error.message
+//         });
+//     }
+// };
 
 const addDishToCategory = async (req, res) => {
-    const { 
+    const {
         restaurantId,
         menuId,
         categoryId,
@@ -890,12 +890,12 @@ const addDishToCategory = async (req, res) => {
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
 
         // Find the restaurant and validate the document structure
-        const restaurant = await restaurantsCollection.findOne({ 
+        const restaurant = await restaurantsCollection.findOne({
             _id: new ObjectId(restaurantId)
         });
 
@@ -939,7 +939,7 @@ const addDishToCategory = async (req, res) => {
         }
 
         // Check if dish already exists in any category
-        const existingDishInCategories = restaurant.menuCategories?.some(cat => 
+        const existingDishInCategories = restaurant.menuCategories?.some(cat =>
             cat.dishes?.some(d => d.id === dishId)
         );
 
@@ -963,27 +963,27 @@ const addDishToCategory = async (req, res) => {
 
         // Initialize dishes array if it doesn't exist
         const initializeResult = await restaurantsCollection.updateOne(
-            { 
+            {
                 _id: new ObjectId(restaurantId),
                 'menuCategories._id': new ObjectId(categoryId),
                 'menuCategories.dishes': { $exists: false }
             },
-            { 
+            {
                 $set: { 'menuCategories.$.dishes': [] }
             }
         );
 
         // Add the dish to the category
         const result = await restaurantsCollection.updateOne(
-            { 
+            {
                 _id: new ObjectId(restaurantId),
                 'menuCategories._id': new ObjectId(categoryId)
             },
-            { 
-                $push: { 
+            {
+                $push: {
                     'menuCategories.$.dishes': dishWithCategory
                 },
-                $set: { 
+                $set: {
                     updatedAt: new Date(),
                     'menuCategories.$.updatedAt': new Date()
                 }
@@ -1014,14 +1014,14 @@ const addDishToCategory = async (req, res) => {
 
 
 const addDish = async (req, res) => {
-    const { 
-        name, 
-        price, 
-        rating, 
-        description, 
-        calories, 
-        carbs, 
-        protein, 
+    const {
+        name,
+        price,
+        rating,
+        description,
+        calories,
+        carbs,
+        protein,
         fats,
         servingSize,
         servingUnit,
@@ -1079,24 +1079,24 @@ const addDish = async (req, res) => {
 
         // Validate image
         if (!req.file) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 status: false,
-                error: 'No dish image provided' 
+                error: 'No dish image provided'
             });
         }
 
         const image = req.file.location;
-        
+
         if (!image) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 status: false,
-                error: 'Image upload failed' 
+                error: 'Image upload failed'
             });
         }
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
         const categoriesCollection = db.collection('menucategories');
@@ -1115,7 +1115,7 @@ const addDish = async (req, res) => {
         }
 
         // Fetch category details
-        const categoryDoc = await categoriesCollection.findOne({ 
+        const categoryDoc = await categoriesCollection.findOne({
             _id: new ObjectId(categoryId)
         });
 
@@ -1184,13 +1184,13 @@ const addDish = async (req, res) => {
             }),
             nutritionFacts: {
                 ...(calories && { calories: parseInt(calories) }),
-                ...(carbs && { 
+                ...(carbs && {
                     totalCarbohydrates: { value: parseFloat(carbs) }
                 }),
-                ...(protein && { 
+                ...(protein && {
                     protein: { value: parseFloat(protein) }
                 }),
-                ...(fats && { 
+                ...(fats && {
                     totalFat: { value: parseFloat(fats) }
                 })
             },
@@ -1200,14 +1200,14 @@ const addDish = async (req, res) => {
 
         // Add dish to menu
         const result = await restaurantsCollection.updateOne(
-            { 
+            {
                 _id: new ObjectId(restaurantId),
                 "menus.id": menuId
             },
-            { 
-                $push: { 
-                    "menus.$.dishes": newDish 
-                } 
+            {
+                $push: {
+                    "menus.$.dishes": newDish
+                }
             }
         );
 
@@ -1225,10 +1225,10 @@ const addDish = async (req, res) => {
 
     } catch (error) {
         console.error('Error adding dish:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             status: false,
             error: 'Error adding dish',
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -1236,13 +1236,13 @@ const addDish = async (req, res) => {
 
 const editDish = async (req, res) => {
     try {
-        const { 
+        const {
             dishId,        // Custom format: bk-dish-XXX
             restaurantId,  // MongoDB ObjectId
             menuId,        // Custom format: bk-menu-XXX
             categoryId,    // MongoDB ObjectId (optional)
             subcategoryId, // MongoDB ObjectId (optional)
-            ...updateData 
+            ...updateData
         } = req.body;
 
         // Basic validation
@@ -1282,7 +1282,7 @@ const editDish = async (req, res) => {
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
         const categoriesCollection = db.collection('menucategories');
@@ -1310,7 +1310,7 @@ const editDish = async (req, res) => {
                 });
             }
 
-            const categoryDoc = await categoriesCollection.findOne({ 
+            const categoryDoc = await categoriesCollection.findOne({
                 _id: new ObjectId(categoryId)
             });
 
@@ -1361,8 +1361,8 @@ const editDish = async (req, res) => {
             ...(updateData.price && { "menus.$[menu].dishes.$[dish].price": parseFloat(updateData.price) }),
             ...(updateData.description && { "menus.$[menu].dishes.$[dish].description": updateData.description }),
             ...(updateData.category && { "menus.$[menu].dishes.$[dish].category": updateData.category }),
-            ...(updateData.subcategory !== undefined && { 
-                "menus.$[menu].dishes.$[dish].subcategory": updateData.subcategory 
+            ...(updateData.subcategory !== undefined && {
+                "menus.$[menu].dishes.$[dish].subcategory": updateData.subcategory
             }),
             "menus.$[menu].dishes.$[dish].updatedAt": new Date()
         };
@@ -1372,9 +1372,9 @@ const editDish = async (req, res) => {
             const image = req.file.location;
             if (!image) {
                 await client.close();
-                return res.status(400).json({ 
+                return res.status(400).json({
                     status: false,
-                    error: 'Image upload failed' 
+                    error: 'Image upload failed'
                 });
             }
             updateFields["menus.$[menu].dishes.$[dish].image"] = image;
@@ -1408,10 +1408,10 @@ const editDish = async (req, res) => {
 
     } catch (error) {
         console.error('Error updating dish:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             status: false,
             error: 'Error updating dish',
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -1430,7 +1430,7 @@ const getAllMenuCategories = async (req, res) => {
 
         const client = new MongoClient(uri);
         await client.connect();
-        
+
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
 
@@ -1471,7 +1471,55 @@ const getAllMenuCategories = async (req, res) => {
 };
 
 
-module.exports = { getRestaurantNames, addCategory, getAllcategories,addRestaurant,editRestaurant,searchRestaurant,
-    getRestaurantMenu,searchMenu,editDish,addDish, filterMenuByCategory,createMenuCategory,createMenuSubcategory,
-    getAllMenuCategoriesAndSubcategories,addDishToCategory,getAllMenuCategories
- }
+const showAllMenuAndSubCategories = async (req, res) => {
+    const { restaurantId } = req.body
+    try {
+        if (!restaurantId && !ObjectId.isValid(restaurantId)) {
+            return res.status(400).json({
+                status: false,
+                error: 'Valid restaurant ID is required'
+            })
+        }
+        const client = new MongoClient(uri)
+        await client.connect()
+
+        const db = client.db('hungerX')
+        const restaurantsCollection = db.collection('restaurants')
+
+        const restaurant = await restaurantsCollection.findOne(
+            { _id: new ObjectId(restaurantId) },
+            {
+                projection: {
+                    'menuCategories._id': 1,
+                    'menuCategories.name': 1,
+                    'menuCategories.subcategories': 1
+                }
+            }
+        )
+        await client.close();
+
+        if (!restaurant) {
+            return res.status(404).json({
+                status: false,
+                error: 'Restaurant not found'
+            })
+        }
+        return res.status(200).json({
+            status: true,
+            restaurant
+        })
+    } catch (error) {
+        console.error('Error fetching menu categories:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error fetching menu categories',
+            details: error.message
+        });
+    }
+}
+
+module.exports = {
+    getRestaurantNames, addCategory, getAllcategories, addRestaurant, editRestaurant, searchRestaurant,
+    getRestaurantMenu, searchMenu, editDish, addDish, filterMenuByCategory, createMenuCategory, createMenuSubcategory
+    , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories
+}

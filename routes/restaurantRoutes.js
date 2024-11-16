@@ -15,11 +15,12 @@ router.post('/addMenuSubcategory',restaurantController.createMenuSubcategory)
 router.post('/searchMenu',restaurantController.searchMenu)
 router.post('/filterMenu',restaurantController.filterMenuByCategory)
 // router.post('/getMenuCategory',restaurantController.getRestaurantCategories)
-router.post('/getCategoryandSubcategories',restaurantController.getAllMenuCategoriesAndSubcategories)
+// router.post('/getCategoryandSubcategories',restaurantController.getAllMenuCategoriesAndSubcategories)
 router.post('/addDish',upload.single('image'),restaurantController.addDish)
 router.put('/editDish',upload.single('image'),restaurantController.editDish)
 router.post('/addDishToCategory',restaurantController.addDishToCategory)
 router.post('/DropDownMenuategory',restaurantController.getAllMenuCategories)
+router.post('/getMenuAndSubCategory',restaurantController.showAllMenuAndSubCategories)
 
 
 module.exports = router;
