@@ -1488,8 +1488,144 @@ const showAllMenuAndSubCategories = async (req, res) => {
     }
 }
 
+const getRestaurantDishesByCategory = async (req, res) => {
+    const { categoryId, subcategoryId,restaurantId } = req.body;
+
+    try {
+        if (!restaurantId || !categoryId) {
+            return res.status(400).json({
+                status: false,
+                error: 'Restaurant ID and Category ID are required'
+            });
+        }
+
+        const client = new MongoClient(uri);
+        await client.connect();
+
+        const db = client.db('hungerX');
+        const restaurantsCollection = db.collection('restaurants');
+
+        // Build the match conditions for filtering dishes
+        const dishMatchCondition = {
+            'menus.dishes.categoryInfo.categoryId': new ObjectId(categoryId)
+        };
+
+        if (subcategoryId) {
+            dishMatchCondition['menus.dishes.categoryInfo.subcategoryId'] = new ObjectId(subcategoryId);
+        }
+
+        // Find restaurant and filter dishes by category
+        const restaurant = await restaurantsCollection.aggregate([
+            // Match the specific restaurant
+            { 
+                $match: { 
+                    _id: new ObjectId(restaurantId)
+                } 
+            },
+
+            // Unwind the menus array
+            { $unwind: '$menus' },
+
+            // Unwind the dishes array
+            { $unwind: '$menus.dishes' },
+
+            // Match dishes with the specified category
+            {
+                $match: dishMatchCondition
+            },
+
+            // Group back to restaurant structure
+            {
+                $group: {
+                    _id: '$_id',
+                    name: { $first: '$name' },
+                    logo: { $first: '$logo' },
+                    menuId: { $first: '$menus.id' },
+                    menuName: { $first: '$menus.name' },
+                    dishes: {
+                        $push: {
+                            id: '$menus.dishes.id',
+                            name: '$menus.dishes.name',
+                            image: '$menus.dishes.image',
+                            description: '$menus.dishes.description',
+                            price: '$menus.dishes.price',
+                            servingInfo: '$menus.dishes.servingInfo',
+                            nutritionFacts: '$menus.dishes.nutritionFacts',
+                            categoryInfo: '$menus.dishes.categoryInfo',
+                            updatedAt: '$menus.dishes.updatedAt'
+                        }
+                    }
+                }
+            }
+        ]).toArray();
+
+        await client.close();
+
+        if (restaurant.length === 0) {
+            return res.status(404).json({
+                status: false,
+                message: 'No dishes found for the specified category in this restaurant',
+                data: null
+            });
+        }
+
+        // Get the category name from menuCategories
+        const categoryName = restaurant[0].dishes[0]?.categoryInfo?.categoryName || 'Unknown Category';
+        const subcategoryName = restaurant[0].dishes[0]?.categoryInfo?.subcategoryName;
+
+        // Format the response
+        const response = {
+            restaurantInfo: {
+                id: restaurant[0]._id,
+                name: restaurant[0].name,
+                logo: restaurant[0].logo
+            },
+            menuInfo: {
+                id: restaurant[0].menuId,
+                name: restaurant[0].menuName
+            },
+            categoryInfo: {
+                id: categoryId,
+                name: categoryName,
+                subcategory: subcategoryId ? {
+                    id: subcategoryId,
+                    name: subcategoryName
+                } : null
+            },
+            dishes: restaurant[0].dishes.map(dish => ({
+                id: dish.id,
+                name: dish.name,
+                image: dish.image,
+                description: dish.description,
+                price: dish.price,
+                servingInfo: dish.servingInfo,
+                nutritionFacts: dish.nutritionFacts,
+                updatedAt: dish.updatedAt
+            }))
+        };
+
+        res.status(200).json({
+            status: true,
+            message: 'Dishes retrieved successfully',
+            count: response.dishes.length,
+            data: response
+        });
+
+    } catch (error) {
+        console.error('Error getting restaurant dishes by category:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error retrieving dishes',
+            details: error.message
+        });
+    }
+};
+
+// For Express router
+// router.get('/restaurant/:restaurantId/dishes', getRestaurantDishesByCategory);
+
 module.exports = {
     getRestaurantNames, addCategory, getAllcategories, addRestaurant, editRestaurant, searchRestaurant,
     getRestaurantMenu, searchMenu, editDish, addDish, filterMenuByCategory, createMenuCategory, createMenuSubcategory
-    , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories
+    , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories,getRestaurantDishesByCategory
 }
