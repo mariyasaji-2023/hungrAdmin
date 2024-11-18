@@ -520,18 +520,44 @@ const createMenuSubcategory = async (req, res) => {
         });
     }
 };
-
-const searchMenu = async (req, res) => {
+const searchMenuSuggestions = async (req, res) => {
     const { query, restaurantId } = req.body;
 
-    if (!query) {
-        return res.status(400).json({
-            status: false,
-            error: 'Search query is required'
-        });
-    }
-
     try {
+        if (!restaurantId) {
+            return res.status(400).json({
+                status: false,
+                error: 'Restaurant ID is required'
+            });
+        }
+
+        // If query is empty, return recent or popular dishes
+        if (!query || query.trim() === '') {
+            const restaurant = await Restaurant.findById(restaurantId);
+            const popularDishes = restaurant.menus.reduce((dishes, menu) => {
+                return dishes.concat(
+                    menu.dishes
+                        .slice(0, 5) // Get first 5 dishes from each menu as popular items
+                        .map(dish => ({
+                            id: dish.id,
+                            name: dish.name,
+                            image: dish.image,
+                            price: dish.price,
+                            menuName: menu.name,
+                            type: 'popular'
+                        }))
+                );
+            }, []);
+
+            return res.status(200).json({
+                status: true,
+                data: {
+                    suggestions: popularDishes,
+                    type: 'popular_items'
+                }
+            });
+        }
+
         const restaurant = await Restaurant.findById(restaurantId);
 
         if (!restaurant) {
@@ -541,49 +567,130 @@ const searchMenu = async (req, res) => {
             });
         }
 
-        // Create a case-insensitive search through all menus and dishes
-        const searchResults = restaurant.menus.reduce((results, menu) => {
-            const matchingDishes = menu.dishes.filter(dish =>
-                dish.name.toLowerCase().includes(query.toLowerCase())
-            );
+        // Get all matching dishes with different match types
+        const suggestions = restaurant.menus.reduce((results, menu) => {
+            menu.dishes.forEach(dish => {
+                const dishName = dish.name.toLowerCase();
+                const searchQuery = query.toLowerCase();
 
-            if (matchingDishes.length > 0) {
-                results.push({
-                    menuName: menu.name,
-                    dishes: matchingDishes
-                });
-            }
-
+                // Exact match at start
+                if (dishName.startsWith(searchQuery)) {
+                    results.push({
+                        id: dish.id,
+                        name: dish.name,
+                        image: dish.image,
+                        price: dish.price,
+                        menuName: menu.name,
+                        matchType: 'starts_with',
+                        category: dish.categoryInfo?.categoryName,
+                        type: 'dish'
+                    });
+                }
+                // Contains match
+                else if (dishName.includes(searchQuery)) {
+                    results.push({
+                        id: dish.id,
+                        name: dish.name,
+                        image: dish.image,
+                        price: dish.price,
+                        menuName: menu.name,
+                        matchType: 'contains',
+                        category: dish.categoryInfo?.categoryName,
+                        type: 'dish'
+                    });
+                }
+                // Word match
+                else if (dish.name.toLowerCase().split(' ').some(word => word.startsWith(searchQuery))) {
+                    results.push({
+                        id: dish.id,
+                        name: dish.name,
+                        image: dish.image,
+                        price: dish.price,
+                        menuName: menu.name,
+                        matchType: 'word_match',
+                        category: dish.categoryInfo?.categoryName,
+                        type: 'dish'
+                    });
+                }
+            });
             return results;
         }, []);
+
+        // Add category suggestions
+        const categorySuggestions = restaurant.menuCategories
+            .filter(category => 
+                category.name.toLowerCase().includes(query.toLowerCase())
+            )
+            .map(category => ({
+                id: category._id,
+                name: category.name,
+                type: 'category',
+                matchType: 'category',
+                dishCount: category.dishes ? category.dishes.length : 0
+            }));
+
+        // Sort suggestions by relevance
+        const sortedSuggestions = [
+            ...suggestions.sort((a, b) => {
+                // First sort by match type
+                const matchTypeOrder = {
+                    'starts_with': 0,
+                    'contains': 1,
+                    'word_match': 2
+                };
+                return matchTypeOrder[a.matchType] - matchTypeOrder[b.matchType];
+            }).slice(0, 8), // Limit to top 8 dish suggestions
+            ...categorySuggestions.slice(0, 3) // Limit to top 3 category suggestions
+        ];
+
+        // Group similar items
+        const groupedSuggestions = sortedSuggestions.reduce((groups, item) => {
+            const key = item.type;
+            if (!groups[key]) {
+                groups[key] = [];
+            }
+            groups[key].push(item);
+            return groups;
+        }, {});
 
         return res.status(200).json({
             status: true,
             data: {
+                query: query,
+                suggestions: groupedSuggestions,
                 restaurant: {
                     _id: restaurant._id,
                     name: restaurant.name,
-                    logo: restaurant.logo,
-                    category: restaurant.category,
-                    rating: restaurant.rating,
-                    createdAt: restaurant.createdAt,
-                    updatedAt: restaurant.updatedAt
+                    logo: restaurant.logo
                 },
-                results: searchResults,
-                totalResults: searchResults.reduce((total, menu) =>
-                    total + menu.dishes.length, 0
-                )
+                totalResults: sortedSuggestions.length
             }
         });
 
     } catch (error) {
-        console.error("Error searching menu:", error);
+        console.error("Error getting search suggestions:", error);
         return res.status(500).json({
             status: false,
-            error: 'Failed to search menu'
+            error: 'Failed to get search suggestions'
         });
     }
-}
+};
+
+// Helper function to calculate relevance score
+const calculateRelevance = (dishName, searchQuery) => {
+    const name = dishName.toLowerCase();
+    const query = searchQuery.toLowerCase();
+    
+    if (name === query) return 1;
+    if (name.startsWith(query)) return 0.8;
+    if (name.includes(query)) return 0.6;
+    
+    // Check for word matches
+    const words = name.split(' ');
+    if (words.some(word => word.startsWith(query))) return 0.4;
+    
+    return 0;
+};
 
 
 const filterMenuByCategory = async (req, res) => {
@@ -1626,6 +1733,6 @@ const getRestaurantDishesByCategory = async (req, res) => {
 
 module.exports = {
     getRestaurantNames, addCategory, getAllcategories, addRestaurant, editRestaurant, searchRestaurant,
-    getRestaurantMenu, searchMenu, editDish, addDish, filterMenuByCategory, createMenuCategory, createMenuSubcategory
+    getRestaurantMenu, searchMenuSuggestions, editDish, addDish, filterMenuByCategory, createMenuCategory, createMenuSubcategory
     , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories,getRestaurantDishesByCategory
 }
