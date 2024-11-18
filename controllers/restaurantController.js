@@ -872,11 +872,13 @@ const filterMenuByCategory = async (req, res) => {
 //     }
 // };
 
+
 const addDishToCategory = async (req, res) => {
     const {
         restaurantId,
         menuId,
         categoryId,
+        subcategoryId,
         dishId
     } = req.body;
 
@@ -894,7 +896,7 @@ const addDishToCategory = async (req, res) => {
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
 
-        // Find the restaurant and validate the document structure
+        // Find the restaurant
         const restaurant = await restaurantsCollection.findOne({
             _id: new ObjectId(restaurantId)
         });
@@ -904,25 +906,6 @@ const addDishToCategory = async (req, res) => {
             return res.status(404).json({
                 status: false,
                 error: 'Restaurant not found'
-            });
-        }
-
-        // Find the menu and dish in the restaurants.menus array
-        const menu = restaurant.menus?.find(m => m.id === menuId);
-        if (!menu) {
-            await client.close();
-            return res.status(404).json({
-                status: false,
-                error: 'Menu not found in restaurant'
-            });
-        }
-
-        const dish = menu.dishes?.find(d => d.id === dishId);
-        if (!dish) {
-            await client.close();
-            return res.status(404).json({
-                status: false,
-                error: 'Dish not found in menu'
             });
         }
 
@@ -938,80 +921,67 @@ const addDishToCategory = async (req, res) => {
             });
         }
 
-        // Check if dish already exists in any category
-        const existingDishInCategories = restaurant.menuCategories?.some(cat =>
-            cat.dishes?.some(d => d.id === dishId)
-        );
-
-        if (existingDishInCategories) {
-            await client.close();
-            return res.status(400).json({
-                status: false,
-                error: 'Dish already exists in a category'
-            });
+        // Find subcategory if provided
+        let subcategory;
+        if (subcategoryId) {
+            subcategory = category.subcategories?.find(
+                sub => sub._id.toString() === subcategoryId
+            );
+            if (!subcategory) {
+                await client.close();
+                return res.status(404).json({
+                    status: false,
+                    error: 'Subcategory not found in category'
+                });
+            }
         }
 
-        // Create the dish document with category info
-        const dishWithCategory = {
-            ...dish,
-            categoryInfo: {
-                categoryId: new ObjectId(categoryId),
-                categoryName: category.name
-            },
-            updatedAt: new Date()
-        };
-
-        // Initialize dishes array if it doesn't exist
-        const initializeResult = await restaurantsCollection.updateOne(
-            {
-                _id: new ObjectId(restaurantId),
-                'menuCategories._id': new ObjectId(categoryId),
-                'menuCategories.dishes': { $exists: false }
-            },
-            {
-                $set: { 'menuCategories.$.dishes': [] }
-            }
-        );
-
-        // Add the dish to the category
+        // Add category info to the dish in menus array
         const result = await restaurantsCollection.updateOne(
             {
                 _id: new ObjectId(restaurantId),
-                'menuCategories._id': new ObjectId(categoryId)
+                'menus.id': menuId,
+                'menus.dishes.id': dishId
             },
             {
-                $push: {
-                    'menuCategories.$.dishes': dishWithCategory
-                },
                 $set: {
-                    updatedAt: new Date(),
-                    'menuCategories.$.updatedAt': new Date()
+                    'menus.$[menu].dishes.$[dish].categoryInfo': {
+                        categoryId: new ObjectId(categoryId),
+                        categoryName: category.name,
+                        subcategoryId: subcategoryId ? new ObjectId(subcategoryId) : undefined,
+                        subcategoryName: subcategory ? subcategory.name : undefined
+                    },
+                    'menus.$[menu].dishes.$[dish].updatedAt': new Date()
                 }
+            },
+            {
+                arrayFilters: [
+                    { 'menu.id': menuId },
+                    { 'dish.id': dishId }
+                ]
             }
         );
 
         await client.close();
 
-        if (result.modifiedCount > 0 || initializeResult.modifiedCount > 0) {
+        if (result.modifiedCount > 0) {
             res.status(200).json({
                 status: true,
-                message: 'Dish added to category successfully',
-                dish: dishWithCategory
+                message: 'Category information added to dish successfully'
             });
         } else {
-            throw new Error('Failed to add dish to category');
+            throw new Error('Failed to add category information to dish');
         }
 
     } catch (error) {
-        console.error('Error adding dish to category:', error);
+        console.error('Error adding category information to dish:', error);
         res.status(500).json({
             status: false,
-            error: 'Error adding dish to category',
+            error: 'Error adding category information to dish',
             details: error.message
         });
     }
 };
-
 
 const addDish = async (req, res) => {
     const {
