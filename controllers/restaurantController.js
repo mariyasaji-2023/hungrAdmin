@@ -520,6 +520,8 @@ const createMenuSubcategory = async (req, res) => {
         });
     }
 };
+
+
 const searchMenuSuggestions = async (req, res) => {
     const { query, restaurantId } = req.body;
 
@@ -544,6 +546,8 @@ const searchMenuSuggestions = async (req, res) => {
                             image: dish.image,
                             price: dish.price,
                             menuName: menu.name,
+                            category: dish.categoryInfo?.categoryName || null,
+                            subcategory: dish.categoryInfo?.subcategoryName || null,
                             type: 'popular'
                         }))
                 );
@@ -582,7 +586,8 @@ const searchMenuSuggestions = async (req, res) => {
                         price: dish.price,
                         menuName: menu.name,
                         matchType: 'starts_with',
-                        category: dish.categoryInfo?.categoryName,
+                        category: dish.categoryInfo?.categoryName || null,
+                        subcategory: dish.categoryInfo?.subcategoryName || null,
                         type: 'dish'
                     });
                 }
@@ -595,7 +600,8 @@ const searchMenuSuggestions = async (req, res) => {
                         price: dish.price,
                         menuName: menu.name,
                         matchType: 'contains',
-                        category: dish.categoryInfo?.categoryName,
+                        category: dish.categoryInfo?.categoryName || null,
+                        subcategory: dish.categoryInfo?.subcategoryName || null,
                         type: 'dish'
                     });
                 }
@@ -608,7 +614,8 @@ const searchMenuSuggestions = async (req, res) => {
                         price: dish.price,
                         menuName: menu.name,
                         matchType: 'word_match',
-                        category: dish.categoryInfo?.categoryName,
+                        category: dish.categoryInfo?.categoryName || null,
+                        subcategory: dish.categoryInfo?.subcategoryName || null,
                         type: 'dish'
                     });
                 }
@@ -674,22 +681,6 @@ const searchMenuSuggestions = async (req, res) => {
             error: 'Failed to get search suggestions'
         });
     }
-};
-
-// Helper function to calculate relevance score
-const calculateRelevance = (dishName, searchQuery) => {
-    const name = dishName.toLowerCase();
-    const query = searchQuery.toLowerCase();
-    
-    if (name === query) return 1;
-    if (name.startsWith(query)) return 0.8;
-    if (name.includes(query)) return 0.6;
-    
-    // Check for word matches
-    const words = name.split(' ');
-    if (words.some(word => word.startsWith(query))) return 0.4;
-    
-    return 0;
 };
 
 
