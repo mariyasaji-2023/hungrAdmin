@@ -1324,7 +1324,7 @@ const addDish = async (req, res) => {
             details: error.message
         });
     }
-};
+} 
 
 const editDish = async (req, res) => {
     try {
@@ -1332,8 +1332,6 @@ const editDish = async (req, res) => {
             dishId,        // Custom format: bk-dish-XXX
             restaurantId,  // MongoDB ObjectId
             menuId,        // Custom format: bk-menu-XXX
-            categoryId,    // MongoDB ObjectId (optional)
-            subcategoryId, // MongoDB ObjectId (optional)
             ...updateData
         } = req.body;
 
@@ -1377,7 +1375,6 @@ const editDish = async (req, res) => {
 
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
-        const categoriesCollection = db.collection('menucategories');
 
         // Find the restaurant first
         const restaurant = await restaurantsCollection.findOne({
@@ -1392,84 +1389,38 @@ const editDish = async (req, res) => {
             });
         }
 
-        // Handle category and optional subcategory update
-        if (categoryId) {
-            if (!isValidObjectId(categoryId)) {
-                await client.close();
-                return res.status(400).json({
-                    status: false,
-                    error: 'Invalid Category ID format - must be a valid MongoDB ObjectId'
-                });
-            }
-
-            const categoryDoc = await categoriesCollection.findOne({
-                _id: new ObjectId(categoryId)
-            });
-
-            if (!categoryDoc) {
-                await client.close();
-                return res.status(400).json({
-                    status: false,
-                    error: 'Category not found'
-                });
-            }
-
-            updateData.category = {
-                _id: categoryId,
-                name: categoryDoc.name
-            };
-
-            if (subcategoryId) {
-                if (!isValidObjectId(subcategoryId)) {
-                    await client.close();
-                    return res.status(400).json({
-                        status: false,
-                        error: 'Invalid Subcategory ID format - must be a valid MongoDB ObjectId'
-                    });
-                }
-
-                const subcategory = categoryDoc.subcategories.find(
-                    sub => sub._id.toString() === subcategoryId
-                );
-
-                if (!subcategory) {
-                    await client.close();
-                    return res.status(400).json({
-                        status: false,
-                        error: 'Subcategory not found in the specified category'
-                    });
-                }
-
-                updateData.subcategory = {
-                    _id: subcategoryId,
-                    name: subcategory.name
-                };
-            }
-        }
-
         // Prepare update fields
         const updateFields = {
             ...(updateData.name && { "menus.$[menu].dishes.$[dish].name": updateData.name }),
             ...(updateData.price && { "menus.$[menu].dishes.$[dish].price": parseFloat(updateData.price) }),
             ...(updateData.description && { "menus.$[menu].dishes.$[dish].description": updateData.description }),
-            ...(updateData.category && { "menus.$[menu].dishes.$[dish].category": updateData.category }),
-            ...(updateData.subcategory !== undefined && {
-                "menus.$[menu].dishes.$[dish].subcategory": updateData.subcategory
+            ...(updateData.rating && { "menus.$[menu].dishes.$[dish].rating": parseFloat(updateData.rating) }),
+            
+            // Handle servingInfo
+            ...(updateData.servingSize && updateData.servingUnit && {
+                "menus.$[menu].dishes.$[dish].servingInfo": {
+                    size: parseFloat(updateData.servingSize),
+                    unit: updateData.servingUnit,
+                    equivalentTo: `${updateData.servingSize} ${updateData.servingUnit} ${updateData.name || 'of dish'}`
+                }
             }),
+
+            // Handle nutritionFacts
+            ...((updateData.calories || updateData.carbs || updateData.protein || updateData.fats) && {
+                "menus.$[menu].dishes.$[dish].nutritionFacts": {
+                    ...(updateData.calories && { calories: parseInt(updateData.calories) }),
+                    ...(updateData.carbs && { totalCarbohydrates: { value: parseFloat(updateData.carbs) } }),
+                    ...(updateData.protein && { protein: { value: parseFloat(updateData.protein) } }),
+                    ...(updateData.fats && { totalFat: { value: parseFloat(updateData.fats) } })
+                }
+            }),
+            
             "menus.$[menu].dishes.$[dish].updatedAt": new Date()
         };
 
-        // Handle image upload
-        if (req.file) {
-            const image = req.file.location;
-            if (!image) {
-                await client.close();
-                return res.status(400).json({
-                    status: false,
-                    error: 'Image upload failed'
-                });
-            }
-            updateFields["menus.$[menu].dishes.$[dish].image"] = image;
+        // Handle image upload if provided
+        if (req.file?.location) {
+            updateFields["menus.$[menu].dishes.$[dish].image"] = req.file.location;
         }
 
         // Update the dish
@@ -1507,7 +1458,6 @@ const editDish = async (req, res) => {
         });
     }
 };
-
 
 
 const getAllMenuCategories = async (req, res) => {
