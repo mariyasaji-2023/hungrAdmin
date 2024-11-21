@@ -59,7 +59,7 @@ const formatDateTime = (dateString) => {
     return `${day}-${month}-${year}, ${hours}.${minutes}`;
 }
 
-const addCategory = async (req, res) => {
+const addRestaurantCategory = async (req, res) => {
     const { name } = req.body
     try {
         const category = new Category({ name })
@@ -426,6 +426,96 @@ const createMenuCategory = async (req, res) => {
     }
 };
 
+const editmenuCategory = async (req, res) => {
+    const { categoryId, restaurantId, name } = req.body
+
+    try {
+        if (!categoryId || !restaurantId || !name) {
+            return res.status(400).json({
+                status: false,
+                error: 'Category ID, restaurant ID, and new name are required'
+            })
+        }
+        const client = new MongoClient(uri)
+        await client.connect();
+
+        const db = client.db('hungerX')
+        const restaurantCollection = db.collection('restaurants')
+
+        const restaurant = await restaurantCollection.findOne({
+            _id: new ObjectId(restaurantId)
+        })
+        if (!restaurant) {
+            await client.close();
+            return res.status(404).json({
+                status: false,
+                error: 'Restarant not found'
+            })
+        }
+        const existingCategory = restaurant.menuCategories?.find(
+            cat => cat._id.toString() === categoryId
+        );
+        if (!existingCategory) {
+            await client.close;
+            return res.status(404).json({
+                status: false,
+                error: 'Category not found'
+            })
+        }
+
+        const nameConflict = restaurant.menuCategories.some(
+            cat => cat._id.toString() !== categoryId &&
+                cat.name.toLowerCase() === name.toLowerCase()
+        );
+        if (nameConflict) {
+            await client.close()
+            return res.status(400).json({
+                status: false,
+                error: 'Another category with this name already exists'
+            })
+        }
+
+        const result = await restaurantCollection.updateOne(
+            {
+                _id: new ObjectId(restaurantId),
+                'menuCategories._id': new ObjectId(categoryId)
+            },
+            {
+                $set: {
+                    'menuCategories.$.name': name,
+                    'menuCategories.$.updatedAt': new Date(),
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        await client.close()
+
+        if (result.modifiedCount > 0) {
+            res.status(200).json({
+                status: true,
+                message: 'Category updated successfully',
+                category: {
+                    _id: categoryId,
+                    name,
+                    updatedAt: new Date()
+                }
+            })
+        } else {
+            throw new Error('Failed to updating category')
+        }
+    } catch (error) {
+        console.log('Error updating categoty:', error);
+        res.status(500).json({
+            status: false,
+            error: 'Error updating category',
+            details: error.message
+        })
+
+    }
+}
+
+
 const createMenuSubcategory = async (req, res) => {
     const { categoryId, name, restaurantId } = req.body;
 
@@ -625,7 +715,7 @@ const searchMenuSuggestions = async (req, res) => {
 
         // Add category suggestions
         const categorySuggestions = restaurant.menuCategories
-            .filter(category => 
+            .filter(category =>
                 category.name.toLowerCase().includes(query.toLowerCase())
             )
             .map(category => ({
@@ -1587,7 +1677,7 @@ const showAllMenuAndSubCategories = async (req, res) => {
 }
 
 const getRestaurantDishesByCategory = async (req, res) => {
-    const { categoryId, subcategoryId,restaurantId } = req.body;
+    const { categoryId, subcategoryId, restaurantId } = req.body;
 
     try {
         if (!restaurantId || !categoryId) {
@@ -1615,10 +1705,10 @@ const getRestaurantDishesByCategory = async (req, res) => {
         // Find restaurant and filter dishes by category
         const restaurant = await restaurantsCollection.aggregate([
             // Match the specific restaurant
-            { 
-                $match: { 
+            {
+                $match: {
                     _id: new ObjectId(restaurantId)
-                } 
+                }
             },
 
             // Unwind the menus array
@@ -1719,11 +1809,8 @@ const getRestaurantDishesByCategory = async (req, res) => {
     }
 };
 
-// For Express router
-// router.get('/restaurant/:restaurantId/dishes', getRestaurantDishesByCategory);
-
 module.exports = {
-    getRestaurantNames, addCategory, getAllcategories, addRestaurant, editRestaurant, searchRestaurant,
+    getRestaurantNames, addRestaurantCategory, getAllcategories, addRestaurant, editRestaurant, searchRestaurant,
     getRestaurantMenu, searchMenuSuggestions, editDish, addDish, filterMenuByCategory, createMenuCategory, createMenuSubcategory
-    , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories,getRestaurantDishesByCategory
+    , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories, getRestaurantDishesByCategory, editmenuCategory
 }
