@@ -1171,6 +1171,7 @@ const addDishToCategory = async (req, res) => {
     }
 };
 
+
 const addDish = async (req, res) => {
     const {
         name,
@@ -1183,18 +1184,16 @@ const addDish = async (req, res) => {
         fats,
         servingSize,
         servingUnit,
-        categoryId,      // MongoDB ObjectId
-        subcategoryId,   // MongoDB ObjectId (Optional)
-        restaurantId,    // MongoDB ObjectId
-        menuId          // Custom format: bk-menu-XXX
+        restaurantId,    
+        menuId          
     } = req.body;
 
     try {
         // Required field validation
-        if (!name || !price || !categoryId || !restaurantId || !menuId) {
+        if (!name || !price || !restaurantId || !menuId) {
             return res.status(400).json({
                 status: false,
-                error: 'Name, price, categoryId, restaurantId, and menuId are required'
+                error: 'Name, price, restaurantId, and menuId are required'
             });
         }
 
@@ -1211,14 +1210,6 @@ const addDish = async (req, res) => {
             });
         }
 
-        // Validate categoryId
-        if (!isValidObjectId(categoryId)) {
-            return res.status(400).json({
-                status: false,
-                error: 'Invalid Category ID format - must be a valid MongoDB ObjectId'
-            });
-        }
-
         // Validate menuId format
         if (!menuId.startsWith('bk-menu-')) {
             return res.status(400).json({
@@ -1227,37 +1218,11 @@ const addDish = async (req, res) => {
             });
         }
 
-        // Validate subcategoryId if provided
-        if (subcategoryId && !isValidObjectId(subcategoryId)) {
-            return res.status(400).json({
-                status: false,
-                error: 'Invalid Subcategory ID format - must be a valid MongoDB ObjectId'
-            });
-        }
-
-        // Validate image
-        if (!req.file) {
-            return res.status(400).json({
-                status: false,
-                error: 'No dish image provided'
-            });
-        }
-
-        const image = req.file.location;
-
-        if (!image) {
-            return res.status(400).json({
-                status: false,
-                error: 'Image upload failed'
-            });
-        }
-
         const client = new MongoClient(uri);
         await client.connect();
 
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
-        const categoriesCollection = db.collection('menucategories');
 
         // Verify restaurant exists
         const restaurant = await restaurantsCollection.findOne({
@@ -1272,67 +1237,37 @@ const addDish = async (req, res) => {
             });
         }
 
-        // Fetch category details
-        const categoryDoc = await categoriesCollection.findOne({
-            _id: new ObjectId(categoryId)
-        });
-
-        if (!categoryDoc) {
-            await client.close();
-            return res.status(400).json({
-                status: false,
-                error: 'Category not found'
+        // Find maximum dish number with safer logic
+        let maxDishNumber = 0;
+        if (restaurant.menus && Array.isArray(restaurant.menus)) {
+            restaurant.menus.forEach(menu => {
+                if (menu.dishes && Array.isArray(menu.dishes)) {
+                    menu.dishes.forEach(dish => {
+                        if (dish.id) {
+                            const match = dish.id.match(/bk-dish-(\d+)/);
+                            if (match) {
+                                const num = parseInt(match[1]);
+                                if (!isNaN(num)) {
+                                    maxDishNumber = Math.max(maxDishNumber, num);
+                                }
+                            }
+                        }
+                    });
+                }
             });
         }
 
-        // Check subcategory if provided
-        let subcategoryInfo = null;
-        if (subcategoryId) {
-            const subcategory = categoryDoc.subcategories.find(
-                sub => sub._id.toString() === subcategoryId
-            );
-
-            if (!subcategory) {
-                await client.close();
-                return res.status(400).json({
-                    status: false,
-                    error: 'Subcategory not found in the specified category'
-                });
-            }
-
-            subcategoryInfo = {
-                _id: subcategoryId,
-                name: subcategory.name
-            };
-        }
-
-        // Find maximum dish number to generate new ID
-        const dishCounter = restaurant.menus.reduce((max, menu) => {
-            if (!menu.dishes) return max;
-            const menuMax = menu.dishes.reduce((count, dish) => {
-                if (!dish.id) return count;
-                const num = parseInt(dish.id.split('-')[2]);
-                return isNaN(num) ? count : Math.max(count, num);
-            }, 0);
-            return Math.max(max, menuMax);
-        }, 0);
-
-        const newDishId = `bk-dish-${(dishCounter + 1).toString().padStart(3, '0')}`;
+        const newDishId = `bk-dish-${(maxDishNumber + 1).toString().padStart(3, '0')}`;
 
         // Create new dish document
         const now = new Date();
         const newDish = {
             id: newDishId,
             name,
-            image,
+            ...(req.file?.location && { image: req.file.location }),
             price: parseFloat(price),
             ...(rating && { rating: parseFloat(rating) }),
             ...(description && { description }),
-            category: {
-                _id: categoryId,
-                name: categoryDoc.name
-            },
-            ...(subcategoryInfo && { subcategory: subcategoryInfo }),
             ...(servingSize && servingUnit && {
                 servingInfo: {
                     size: parseFloat(servingSize),
@@ -1390,7 +1325,6 @@ const addDish = async (req, res) => {
         });
     }
 };
-
 
 const editDish = async (req, res) => {
     try {
@@ -1573,6 +1507,7 @@ const editDish = async (req, res) => {
         });
     }
 };
+
 
 
 const getAllMenuCategories = async (req, res) => {
