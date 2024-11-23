@@ -449,96 +449,187 @@ const createMenuCategory = async (req, res) => {
 };
 
 
-
-const editmenuCategory = async (req, res) => {
-    const { categoryId, restaurantId, name } = req.body
+const editMenuCategoryandSub = async (req, res) => {
+    const { categoryId, subcategoryId, restaurantId, name } = req.body;
 
     try {
-        if (!categoryId || !restaurantId || !name) {
+        if (!restaurantId || !name) {
             return res.status(400).json({
                 status: false,
-                error: 'Category ID, restaurant ID, and new name are required'
-            })
+                error: 'Restaurant ID and new name are required'
+            });
         }
-        const client = new MongoClient(uri)
+
+        if (!categoryId && !subcategoryId) {
+            return res.status(400).json({
+                status: false,
+                error: 'Either category ID or subcategory ID is required'
+            });
+        }
+
+        const client = new MongoClient(uri);
         await client.connect();
 
-        const db = client.db('hungerX')
-        const restaurantCollection = db.collection('restaurants')
+        const db = client.db('hungerX');
+        const restaurantCollection = db.collection('restaurants');
 
         const restaurant = await restaurantCollection.findOne({
             _id: new ObjectId(restaurantId)
-        })
+        });
+
         if (!restaurant) {
             await client.close();
             return res.status(404).json({
                 status: false,
-                error: 'Restarant not found'
-            })
-        }
-        const existingCategory = restaurant.menuCategories?.find(
-            cat => cat._id.toString() === categoryId
-        );
-        if (!existingCategory) {
-            await client.close;
-            return res.status(404).json({
-                status: false,
-                error: 'Category not found'
-            })
+                error: 'Restaurant not found'
+            });
         }
 
-        const nameConflict = restaurant.menuCategories.some(
-            cat => cat._id.toString() !== categoryId &&
-                cat.name.toLowerCase() === name.toLowerCase()
-        );
-        if (nameConflict) {
-            await client.close()
-            return res.status(400).json({
-                status: false,
-                error: 'Another category with this name already exists'
-            })
-        }
+        // Handle subcategory update
+        if (subcategoryId && categoryId) {
+            const category = restaurant.menuCategories?.find(
+                cat => cat._id.toString() === categoryId
+            );
 
-        const result = await restaurantCollection.updateOne(
-            {
-                _id: new ObjectId(restaurantId),
-                'menuCategories._id': new ObjectId(categoryId)
-            },
-            {
-                $set: {
-                    'menuCategories.$.name': name,
-                    'menuCategories.$.updatedAt': new Date(),
-                    updatedAt: new Date()
-                }
+            if (!category) {
+                await client.close();
+                return res.status(404).json({
+                    status: false,
+                    error: 'Category not found'
+                });
             }
-        );
 
-        await client.close()
+            const existingSubcategory = category.subcategories?.find(
+                subcat => subcat._id.toString() === subcategoryId
+            );
 
-        if (result.modifiedCount > 0) {
-            res.status(200).json({
-                status: true,
-                message: 'Category updated successfully',
-                category: {
-                    _id: categoryId,
-                    name,
-                    updatedAt: new Date()
+            if (!existingSubcategory) {
+                await client.close();
+                return res.status(404).json({
+                    status: false,
+                    error: 'Subcategory not found'
+                });
+            }
+
+            // Check for name conflict within the same category
+            const subcategoryNameConflict = category.subcategories.some(
+                subcat => subcat._id.toString() !== subcategoryId &&
+                    subcat.name.toLowerCase() === name.toLowerCase()
+            );
+
+            if (subcategoryNameConflict) {
+                await client.close();
+                return res.status(400).json({
+                    status: false,
+                    error: 'Another subcategory with this name already exists in this category'
+                });
+            }
+
+            const result = await restaurantCollection.updateOne(
+                {
+                    _id: new ObjectId(restaurantId),
+                    'menuCategories._id': new ObjectId(categoryId),
+                    'menuCategories.subcategories._id': new ObjectId(subcategoryId)
+                },
+                {
+                    $set: {
+                        'menuCategories.$[cat].subcategories.$[subcat].name': name,
+                        'menuCategories.$[cat].subcategories.$[subcat].updatedAt': new Date(),
+                        'menuCategories.$[cat].updatedAt': new Date(),
+                        updatedAt: new Date()
+                    }
+                },
+                {
+                    arrayFilters: [
+                        { 'cat._id': new ObjectId(categoryId) },
+                        { 'subcat._id': new ObjectId(subcategoryId) }
+                    ]
                 }
-            })
-        } else {
-            throw new Error('Failed to updating category')
+            );
+
+            await client.close();
+
+            if (result.modifiedCount > 0) {
+                return res.status(200).json({
+                    status: true,
+                    message: 'Subcategory updated successfully',
+                    subcategory: {
+                        _id: subcategoryId,
+                        name,
+                        updatedAt: new Date()
+                    }
+                });
+            }
+
+            throw new Error('Failed to update subcategory');
+        }
+
+        // Handle category update
+        if (categoryId) {
+            const existingCategory = restaurant.menuCategories?.find(
+                cat => cat._id.toString() === categoryId
+            );
+
+            if (!existingCategory) {
+                await client.close();
+                return res.status(404).json({
+                    status: false,
+                    error: 'Category not found'
+                });
+            }
+
+            const categoryNameConflict = restaurant.menuCategories.some(
+                cat => cat._id.toString() !== categoryId &&
+                    cat.name.toLowerCase() === name.toLowerCase()
+            );
+
+            if (categoryNameConflict) {
+                await client.close();
+                return res.status(400).json({
+                    status: false,
+                    error: 'Another category with this name already exists'
+                });
+            }
+
+            const result = await restaurantCollection.updateOne(
+                {
+                    _id: new ObjectId(restaurantId),
+                    'menuCategories._id': new ObjectId(categoryId)
+                },
+                {
+                    $set: {
+                        'menuCategories.$.name': name,
+                        'menuCategories.$.updatedAt': new Date(),
+                        updatedAt: new Date()
+                    }
+                }
+            );
+
+            await client.close();
+
+            if (result.modifiedCount > 0) {
+                return res.status(200).json({
+                    status: true,
+                    message: 'Category updated successfully',
+                    category: {
+                        _id: categoryId,
+                        name,
+                        updatedAt: new Date()
+                    }
+                });
+            }
+
+            throw new Error('Failed to update category');
         }
     } catch (error) {
-        console.log('Error updating categoty:', error);
+        console.log('Error updating category/subcategory:', error);
         res.status(500).json({
             status: false,
-            error: 'Error updating category',
+            error: 'Error updating category/subcategory',
             details: error.message
-        })
-
+        });
     }
-}
-
+};
 
 const createMenuSubcategory = async (req, res) => {
     const { categoryId, name, restaurantId } = req.body;
@@ -1730,5 +1821,5 @@ const getRestaurantDishesByCategory = async (req, res) => {
 module.exports = {
     getRestaurantNames, addRestaurantCategory, getAllcategories, addRestaurant, editRestaurant, searchRestaurant,
     getRestaurantMenu, searchMenuSuggestions, editDish, addDish, filterMenuByCategory, createMenuCategory, createMenuSubcategory
-    , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories, getRestaurantDishesByCategory, editmenuCategory
+    , addDishToCategory, getAllMenuCategories, showAllMenuAndSubCategories, getRestaurantDishesByCategory, editMenuCategoryandSub
 }
