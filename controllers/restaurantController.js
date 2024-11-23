@@ -5,7 +5,7 @@ const Category = require('../models/categoryModel')
 const Restaurant = mongoose.model('Restaurant', new mongoose.Schema({}, { strict: false }));
 const upload = require('../middlewares/multer')
 
-const uri = 'mongodb+srv://hungrx001:Os4GO3Iajie9lvGr@hungrx.8wv0t.mongodb.net/hungerX';
+const uri = 'mongodb+srv://hungrx001:b19cQlcRApahiWUD@cluster0.ynchc4e.mongodb.net/hungerX';
 const getRestaurantNames = async (req, res) => {
     const client = new MongoClient(uri);
     try {
@@ -346,9 +346,9 @@ const getRestaurantMenu = async (req, res) => {
     }
 }
 
-
 const createMenuCategory = async (req, res) => {
     const { name, restaurantId } = req.body;
+    let client;
 
     try {
         if (!name || !restaurantId) {
@@ -358,37 +358,53 @@ const createMenuCategory = async (req, res) => {
             });
         }
 
-        const client = new MongoClient(uri);
+        // Validate if the ID is a valid ObjectId
+        if (!ObjectId.isValid(restaurantId)) {
+            return res.status(400).json({
+                status: false,
+                error: 'Invalid restaurant ID format'
+            });
+        }
+
+        client = new MongoClient(uri);
         await client.connect();
 
         const db = client.db('hungerX');
         const restaurantsCollection = db.collection('restaurants');
 
-        // Find the restaurant
+        // Log the current state of the search
+        console.log('Searching for restaurant with ID:', restaurantId);
+        
+        // Find restaurant with properly constructed ObjectId
         const restaurant = await restaurantsCollection.findOne({
             _id: new ObjectId(restaurantId)
         });
 
+
+        // Log the result
+        console.log('Found restaurant:', restaurant);
+
         if (!restaurant) {
-            await client.close();
             return res.status(404).json({
                 status: false,
                 error: 'Restaurant not found'
             });
         }
 
-        // Check if category already exists in the restaurant
-        if (restaurant.menuCategories && restaurant.menuCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
-            await client.close();
+        // Initialize menuCategories if it doesn't exist
+        const menuCategories = restaurant.menuCategories || [];
+
+        // Check if category already exists
+        if (menuCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
             return res.status(400).json({
                 status: false,
                 error: 'Category already exists in this restaurant'
             });
         }
 
-        // Create category document with MongoDB ObjectId
+        // Create category document
         const categoryDoc = {
-            _id: new ObjectId(), // Using MongoDB ObjectId
+            _id: new ObjectId(),
             name,
             subcategories: [],
             createdAt: new Date(),
@@ -397,34 +413,42 @@ const createMenuCategory = async (req, res) => {
 
         // Add category to restaurant
         const result = await restaurantsCollection.updateOne(
-            { _id: new ObjectId(restaurantId) },
+            { _id: ObjectId.createFromHexString(restaurantId) },
             {
                 $push: { menuCategories: categoryDoc },
                 $set: { updatedAt: new Date() }
             }
         );
 
-        await client.close();
+        console.log('Update result:', result);
 
         if (result.modifiedCount > 0) {
-            res.status(201).json({
+            return res.status(201).json({
                 status: true,
                 message: 'Category created successfully',
-                category: categoryDoc
+                data: {
+                    category: categoryDoc
+                }
             });
         } else {
-            throw new Error('Failed to create category');
+            throw new Error('Failed to update restaurant with new category');
         }
 
     } catch (error) {
         console.error('Error creating category:', error);
-        res.status(500).json({
+        return res.status(500).json({
             status: false,
             error: 'Error creating category',
             details: error.message
         });
+    } finally {
+        if (client) {
+            await client.close();
+        }
     }
 };
+
+
 
 const editmenuCategory = async (req, res) => {
     const { categoryId, restaurantId, name } = req.body
