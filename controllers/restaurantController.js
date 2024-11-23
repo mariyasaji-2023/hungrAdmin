@@ -611,7 +611,6 @@ const createMenuSubcategory = async (req, res) => {
     }
 };
 
-
 const searchMenuSuggestions = async (req, res) => {
     const { query, restaurantId } = req.body;
 
@@ -626,10 +625,17 @@ const searchMenuSuggestions = async (req, res) => {
         // If query is empty, return recent or popular dishes
         if (!query || query.trim() === '') {
             const restaurant = await Restaurant.findById(restaurantId);
+            if (!restaurant || !restaurant.menus) {
+                return res.status(404).json({
+                    status: false,
+                    error: 'Restaurant or menus not found'
+                });
+            }
+
             const popularDishes = restaurant.menus.reduce((dishes, menu) => {
                 return dishes.concat(
                     menu.dishes
-                        .slice(0, 5) // Get first 5 dishes from each menu as popular items
+                        .slice(0, 5)
                         .map(dish => ({
                             id: dish.id,
                             name: dish.name,
@@ -663,6 +669,8 @@ const searchMenuSuggestions = async (req, res) => {
 
         // Get all matching dishes with different match types
         const suggestions = restaurant.menus.reduce((results, menu) => {
+            if (!menu.dishes) return results; // Skip if no dishes
+
             menu.dishes.forEach(dish => {
                 const dishName = dish.name.toLowerCase();
                 const searchQuery = query.toLowerCase();
@@ -713,31 +721,33 @@ const searchMenuSuggestions = async (req, res) => {
             return results;
         }, []);
 
-        // Add category suggestions
-        const categorySuggestions = restaurant.menuCategories
-            .filter(category =>
-                category.name.toLowerCase().includes(query.toLowerCase())
-            )
-            .map(category => ({
-                id: category._id,
-                name: category.name,
-                type: 'category',
-                matchType: 'category',
-                dishCount: category.dishes ? category.dishes.length : 0
-            }));
+        // Handle category suggestions - check if menuCategories exists
+        let categorySuggestions = [];
+        if (restaurant.menuCategories && Array.isArray(restaurant.menuCategories)) {
+            categorySuggestions = restaurant.menuCategories
+                .filter(category =>
+                    category.name.toLowerCase().includes(query.toLowerCase())
+                )
+                .map(category => ({
+                    id: category._id,
+                    name: category.name,
+                    type: 'category',
+                    matchType: 'category',
+                    dishCount: category.dishes ? category.dishes.length : 0
+                }));
+        }
 
         // Sort suggestions by relevance
         const sortedSuggestions = [
             ...suggestions.sort((a, b) => {
-                // First sort by match type
                 const matchTypeOrder = {
                     'starts_with': 0,
                     'contains': 1,
                     'word_match': 2
                 };
                 return matchTypeOrder[a.matchType] - matchTypeOrder[b.matchType];
-            }).slice(0, 8), // Limit to top 8 dish suggestions
-            ...categorySuggestions.slice(0, 3) // Limit to top 3 category suggestions
+            }).slice(0, 8),
+            ...categorySuggestions.slice(0, 3)
         ];
 
         // Group similar items
@@ -772,7 +782,6 @@ const searchMenuSuggestions = async (req, res) => {
         });
     }
 };
-
 
 const filterMenuByCategory = async (req, res) => {
     const { restaurantId, categoryId } = req.body;
